@@ -11966,27 +11966,18 @@ function SAFE_NUM.FormatColorNumber(colorHex, value, format, secretSuffix)
 end
 
 -- Compose colored "X.X%" string. 5-callsite hot path; centralizes precision.
-local function FmtColorPct(colorHex, pct, displayState)
-    if displayState == "lastKnown" then
-        return SAFE_NUM.FormatColorNumber(colorHex, pct, "(%.1f%%)", "%")
-    elseif displayState == "liveSource" then
-        local text, renderable, placeholder = SAFE_NUM.FormatDisplayNumber(pct, "%.1f%%", "%")
-        if not renderable then return nil end
-        if placeholder then return "|cff" .. colorHex .. text .. "|r" end
-        return "|cff" .. colorHex .. "[" .. text .. "]|r"
-    end
+local function FmtColorPct(colorHex, pct)
     return SAFE_NUM.FormatColorNumber(colorHex, pct, "%.1f%%", "%")
 end
 
 -- Format a stat value (rating + percentage variants honoring user toggles).
 -- Returns TWO strings (ratingStr, valueStr) — see IsDualColMode for routing rules.
 local function FmtRatingPct(rating, pct, statColor, forceUnknownPercent,
-        formattedValue, hasFormattedValue, ratingLastKnown, percentDisplayState)
+        formattedValue, hasFormattedValue)
     local cs = cached.colorStrings
     local rc = (cached.matchValueColorToStat and statColor) or cs.rating
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
-    local ratingFormat = ratingLastKnown and "(%d)" or "%d"
-    local ratingStr = SAFE_NUM.FormatColorNumber(rc, rating, ratingFormat) or ("|cff" .. rc .. "?|r")
+    local ratingStr = SAFE_NUM.FormatColorNumber(rc, rating, "%d") or ("|cff" .. rc .. "?|r")
     local pctStr
     if hasFormattedValue then
         -- formattedValue may be secret; concatenate only, never inspect it.
@@ -11994,7 +11985,7 @@ local function FmtRatingPct(rating, pct, statColor, forceUnknownPercent,
     elseif forceUnknownPercent then
         pctStr = "|cff" .. pc .. "?%|r"
     else
-        pctStr = FmtColorPct(pc, pct, percentDisplayState)
+        pctStr = FmtColorPct(pc, pct)
     end
     if IsDualColMode() then
         return ratingStr .. " |cff808080|||r", pctStr or ""
@@ -12081,8 +12072,7 @@ local function PushItemLevelRow(labels, ratings, values)
             equippedColor = ITEM_LEVEL_ALERT.warnColor
         end
     end
-    local numberFormat = (addon.forever.enabled or cached.itemLevelComplete)
-        and "|cff%s%d|r" or "|cff%s(%d)|r"
+    local numberFormat = "|cff%s%d|r"
     local equippedText = string.format(numberFormat, equippedColor, equipped)
     local overallText = string.format(numberFormat, valueColor, overall)
     local label = ""
@@ -12402,16 +12392,10 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 if cached.showRating then rating = ratingDisplay end
                 local statColor = cs[def.colorKey]
                 local label = def.label
-                local percentDisplayState
-                if sourceLabel and cached.showPercentage then
-                    if cached.labelStyle == "full" then
-                        label = sourceLabel
-                    else
-                        percentDisplayState = "liveSource"
-                    end
+                if sourceLabel and cached.showPercentage and cached.labelStyle == "full" then
+                    label = sourceLabel
                 end
-                local rStr, vStr = FmtRatingPct(
-                    rating, val, statColor, forceUnknownPercent, nil, nil, nil, percentDisplayState)
+                local rStr, vStr = FmtRatingPct(rating, val, statColor, forceUnknownPercent)
                 if targetRows then
                     targetRows[#targetRows + 1] = needTargetRating and addon.archonTargets.BuildMeta(
                         def.statKey, targetRating, def.ratingCR, currentPercent,
@@ -12503,9 +12487,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         end
         if versVisible then
             local versStr = cs.versatility
-            local vRatStr, vValStr = FmtRatingPct(
-                rating, versDisplay, versStr, versDisplayUnknown, nil, nil,
-                ratingLastKnown, versLastKnown and "lastKnown" or nil)
+            local vRatStr, vValStr = FmtRatingPct(rating, versDisplay, versStr, versDisplayUnknown)
             if targetRows then
                 targetRows[#targetRows + 1] = needTargetRating and addon.archonTargets.BuildMeta(
                     "versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE,
@@ -12612,8 +12594,7 @@ local function BuildDefensiveLines(labels, ratings, values, tooltipRows)
         if armorLastKnown then armor = cached.armorDR end
         if (not armorLastKnown and shouldShow(visibilityKey, armor, cached.hideZeroDefensive))
             or shouldShowUnknown(visibilityKey, armorLastKnown, cached.hideZeroDefensive) then
-            local displayState = armorLastKnown and "lastKnown" or nil
-            local rCol, vCol = RouteValueOnly(FmtColorPct(valueColor, armor, displayState))
+            local rCol, vCol = RouteValueOnly(FmtColorPct(valueColor, armor))
             PushRow(labels, ratings, values,
                 FormatLabel(armorStr, "Armor"),
                 rCol, vCol)
@@ -12647,11 +12628,10 @@ local function BuildDurabilityLines(labels, ratings, values, tooltipRows)
     if pct < 0 then pct = 0 end
     if pct > 100 then pct = 100 end
     local valueColor = durStr
-    if (addon.forever.enabled or cached.durabilityComplete) and cached.useAutoColorDurability then
+    if cached.useAutoColorDurability then
         valueColor = RGBToHex(ComputeDurabilityColor(pct))
     end
-    local displayState = not addon.forever.enabled and not cached.durabilityComplete and "lastKnown" or nil
-    local display = FmtColorPct(valueColor, pct, displayState)
+    local display = FmtColorPct(valueColor, pct)
     local rCol, vCol = RouteValueOnly(display)
     PushRow(labels, ratings, values, FormatLabel(durStr, "Durability"), rCol, vCol)
     if tooltipRows then

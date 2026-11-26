@@ -3,6 +3,9 @@ local forever = arg and arg[1] == "forever"
 assert(not arg or not arg[1] or forever, "expected optional forever flavor")
 local flavor = forever and "Forever" or "Retail"
 local fixtures = assert(loadfile("scripts/smoke.lua"))("fixtures")
+local function plain(text)
+    return (text:gsub("|cff%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("||", "|"))
+end
 local function loadStatsPro(locale, options)
     options = options or {}
     options.forever = forever
@@ -2222,8 +2225,8 @@ if not forever then
         { "enUS", "full", 1, "Melee Crit:", "19.0%" },
         { "ruRU", "full", 2, "Крит дальнего боя:", "19.0%" },
         { "enUS", "full", 3, "Spell Crit:", "19.0%" },
-        { "enUS", "short", 3, "C:", "[19.0%]" },
-        { "enUS", "hidden", 3, "", "[19.0%]" },
+        { "enUS", "short", 3, "C:", "19.0%" },
+        { "enUS", "hidden", 3, "", "19.0%" },
     }) do
         local restricted, livePercent = false, 19
         local function crit(index)
@@ -2260,7 +2263,7 @@ if not forever then
             local current = test.buildRenderBlocks()[2]
             local label = current.labels[1]:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
             assert(#current.labels == 1 and label == case[4], "the same Crit row exposes the active source")
-            assert(current.ratings[1] == clean.ratings[1] and current.values[1]:find(probe[2], 1, true),
+            assert(current.ratings[1] == clean.ratings[1] and plain(current.values[1]) == probe[2],
                 "the sourced percentage stays live and in its own column")
             assert(geometry.mainFrameHeight == cleanGeometry.mainFrameHeight
                 and geometry.mainLastLineH == cleanGeometry.mainLastLineH
@@ -2306,6 +2309,7 @@ if not forever then
         end,
         getVersatilityBonus = function()
             if versMode == "nil" then return end
+            if versMode == "protected" then return -9 end
             return versMode == "live" and 0 or 2
         end,
         unitArmor = function()
@@ -2315,8 +2319,9 @@ if not forever then
         unitEffectiveLevel = function() return 80 end,
         paperDollFrameGetArmorReduction = function(effectiveArmor) return effectiveArmor / 100 end,
         inCombatLockdown = function() return combat end,
-        issecretvalue = function(value) return value == -9 end,
+        issecretvalue = function(value) return value == -9 or value == -8 end,
         setFormattedText = function(_, _, value)
+            if value == -8 then return "490" end
             assert(value == -9)
             return "18.0%"
         end,
@@ -2334,17 +2339,25 @@ if not forever then
     armor = 1100
     assert(addon:RunUpdateStatsSafe())
     blocks = test.buildRenderBlocks()
-    assert(blocks[2].ratings[2]:find("(1200)", 1, true) and blocks[2].values[2]:find("(12.0%)", 1, true),
-        "each reused Versatility cell carries last-known provenance")
-    assert(blocks[4].values[1]:find("(25.0%)", 1, true) and armorReads == priorArmorReads,
-        "combat does not read Armor and makes its held amount explicit")
+    assert(plain(blocks[2].ratings[2]) == "1200 |" and plain(blocks[2].values[2]) == "12.0%",
+        "both previous Versatility numbers use the normal formatting")
+    assert(plain(blocks[4].values[1]) == "25.0%" and armorReads == priorArmorReads,
+        "combat keeps the previous Armor percentage in its normal format")
     assert(blocks[2].targetRows[1].comparisonState == "lastKnown")
+
+    versMode, rating = "protected", -8
+    blocks = test.buildRenderBlocks()
+    assert(plain(blocks[2].ratings[2]) == "490 |" and plain(blocks[2].values[2]) == "12.0%",
+        "both protected components retain the plain previous total next to the live rating")
+    assert(test.versatilityState().total == 12 and test.versatilityState().rating == 1200,
+        "the protected sample leaves both clean caches intact")
+    versMode, rating = "partial", nil
 
     local settings = test.profileState().settings
     settings.showPercentage = false
     test.cacheSettings()
     local ratingOnly = test.buildRenderBlocks()[2]
-    assert(#ratingOnly.labels == 1 and ratingOnly.ratings[1]:find("(1200)", 1, true),
+    assert(#ratingOnly.labels == 1 and plain(ratingOnly.ratings[1]) == "1200",
         "rating-only Hide Zero retains a previous nonzero Versatility read for the same gear")
     env.__fireEvent("PLAYER_EQUIPMENT_CHANGED")
     assert(#test.buildRenderBlocks()[2].labels == 0, "rating-only fallback cannot cross an equipment change")
@@ -2365,7 +2378,7 @@ if not forever then
     test.cacheSettings()
     versMode = "nil"
     local unavailable = test.buildRenderBlocks()[2]
-    assert(#unavailable.labels == 1 and unavailable.ratings[1]:find("(12.0%)", 1, true),
+    assert(#unavailable.labels == 1 and plain(unavailable.ratings[1]) == "12.0%",
         "temporarily unavailable Versatility retains the last confirmed percentage for the same gear")
     env.__fireEvent("PLAYER_EQUIPMENT_CHANGED")
     for _, outcome in ipairs({ "nil", "failed", "partial" }) do
@@ -2396,14 +2409,14 @@ if not forever then
     settings.showRating, settings.showPercentage, rating = true, false, nil
     test.cacheSettings()
     local newlyVisible = test.buildRenderBlocks()[2]
-    assert(#newlyVisible.labels == 1 and newlyVisible.ratings[1]:find("(670)", 1, true),
+    assert(#newlyVisible.labels == 1 and plain(newlyVisible.ratings[1]) == "670",
         "a recent nonzero rating sample stays eligible when its column becomes visible")
     settings.showPercentage = true
     test.cacheSettings()
 
     combat, armor = false, nil
     assert(addon:RunUpdateStatsSafe())
-    assert(test.buildRenderBlocks()[4].values[1]:find("(25.0%)", 1, true),
+    assert(plain(test.buildRenderBlocks()[4].values[1]) == "25.0%",
         "leaving combat does not imply that an inaccessible Armor sample is fresh")
     armor = 1100
     assert(addon:RunUpdateStatsSafe())
@@ -2416,8 +2429,8 @@ if not forever then
         "an explicitly stale zero continues to obey defensive Hide Zero")
     settings.hideZeroDefensive = false
     test.cacheSettings()
-    assert(test.buildRenderBlocks()[4].values[1]:find("(0.0%)", 1, true),
-        "the retained zero is visible as stale when defensive Hide Zero is disabled")
+    assert(plain(test.buildRenderBlocks()[4].values[1]) == "0.0%",
+        "the retained zero is visible when defensive Hide Zero is disabled")
     combat, settings.hideZeroDefensive = false, true
     test.cacheSettings()
 
@@ -2488,7 +2501,7 @@ if not forever then
     armor = nil
     assert(armorValue() == nil, "an unresolved specialization cannot display stored Armor")
     settleSpec(64)
-    assert(armorValue():find("(25.0%)", 1, true),
+    assert(plain(armorValue()) == "25.0%",
         "resolving the original spec preserves its own last clean reading instead of the pending sample")
 
     spec, armor = nil, 8800
@@ -2500,7 +2513,7 @@ if not forever then
     armor = 3400
     assert(armorValue():find("34.0%", 1, true))
     armor = nil
-    assert(armorValue():find("(34.0%)", 1, true), "the confirmed new spec stores its own clean reading")
+    assert(plain(armorValue()) == "34.0%", "the confirmed new spec stores its own clean reading")
     print("Retail Armor fallback isolates unresolved specialization readings")
 end
 
@@ -2706,9 +2719,6 @@ do
         end
         error("missing render block " .. key)
     end
-    local function plain(text)
-        return (text:gsub("|cff%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("||", "|"))
-    end
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     assert(getRow("splitItemLevel") == nil, "cold partial item level cannot seed a pair")
     local coldRating, coldValue = getRow("splitDurability")
@@ -2732,18 +2742,18 @@ do
     rating, value = getRow("splitItemLevel")
     equippedCell = forever and value or rating
     assert(not equippedCell:find("|cffff3333", 1, true)
-        and plain(equippedCell):find(forever and "90|" or "(90)", 1, true)
-        and plain(value) == (forever and "90|115" or "(115)"),
+        and plain(equippedCell) == (forever and "90|115" or "90 |")
+        and plain(value) == (forever and "90|115" or "115"),
         "an incomplete item-level read keeps both previous values without an alert")
     _, value = getRow("splitDurability")
-    assert(forever and value == lastGoodDurability or not forever and plain(value) == "(20.0%)",
-        "an incomplete scan keeps the previous durability number and Forever color")
+    assert(value == lastGoodDurability,
+        "an incomplete scan keeps the previous durability number and color")
 
     local settings = test.profileState().settings
     settings.labelStyle, settings.showRating = "hidden", false
     test.cacheSettings()
     rating, value = getRow("splitItemLevel")
-    assert(plain(rating) == (forever and "90|115" or "(90)|(115)") and value == "",
+    assert(plain(rating) == "90|115" and value == "",
         "a stale item-level pair stays intact with hidden labels and a single column")
 
     durability, overall, equipped, unavailable = 65, 112, 110, false
@@ -2752,8 +2762,8 @@ do
     assert(addon:RunUpdateStatsSafe())
     local recoveredRating, recoveredValue = getRow("splitItemLevel")
     assert(plain(recoveredRating) == "110|112" and recoveredValue == "",
-        "item level removes the stale marker after a complete read")
+        "item level uses the new complete read")
     rating = getRow("splitDurability")
-    assert(plain(rating) == "65.0%", "durability removes the stale marker after a complete scan")
+    assert(plain(rating) == "65.0%", "durability uses the new complete scan")
     print(flavor .. " gear HUD freshness regressions passed")
 end

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.25.5 - 26-Nov-2026 — Cleaner HUD numbers
+
+- Show HUD ratings and percentages without brackets or parentheses. When a full value is temporarily unavailable, keep the last reliable reading in the same format.
+- Keep the usual HUD formatting for durability and item level while gear data is temporarily unavailable.
+
 ## 1.25.4 - 26-Nov-2026 — HUD and Settings recovery
 
 - Keep hover tooltips on the correct stat row if a HUD resize is interrupted.

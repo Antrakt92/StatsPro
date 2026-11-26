@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.25.5 - 26-Nov-2026 — HUD formatting maintenance
+
+- Simplify the shared HUD number formatting while preserving Forever's existing display of the last reliable reading.
+
 ## 1.25.4 - 26-Nov-2026 — Stat and Settings recovery
 
 - Keep more HUD stats on their last reliable reading when the game temporarily withholds data. Discard invalid movement readings and refresh the HUD when live values return.

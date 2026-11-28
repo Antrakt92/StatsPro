@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.26.1 - 28-Nov-2026 — Stable stats through shapeshifts and combat
+
+- Keep the last readable value for Crit, Hit, Attack Power and other stats when a form change, combat or a gear swap temporarily interrupts live readings. Refresh as soon as the current value is available.
+- Confirm a zero on two consecutive HUD updates before hiding a previously visible affected stat with Hide Zero.
+- Show Health Regen / sec from the same source as the character sheet, including during combat.
+- Update old preset colors in Custom profiles when the saved palette still matches an older preset. Keep text settings and manually changed palettes.
+
 ## 1.26.0 - 28-Nov-2026 — Health regeneration and brighter HUD colors
 
 - Enable **Health Regen / sec** under **Stats → Utility** to see your health regeneration per second. The HUD switches between the resting and combat rates. Older profile codes still import.

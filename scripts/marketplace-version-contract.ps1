@@ -100,27 +100,18 @@ function Select-StatsProOrdinalMarketplaceVersion {
     param(
         [string[]]$AvailableVersions,
         [Parameter(Mandatory = $true)]
-        [string]$RequestedVersion,
-        [switch]$AllowLegacyTwoComponentVersions
+        [string]$RequestedVersion
     )
 
     Assert-StatsProMarketplaceVersionFormat -Value $RequestedVersion
 
     $comparer = [System.StringComparer]::Ordinal
     $seen = [System.Collections.Generic.HashSet[string]]::new($comparer)
-    # SYNC: BigWigs Packager compares the raw WoWInterface IDs ordinally. The
-    # compatibility endpoint retains historical two-component Retail IDs.
-    $availableVersionPattern = if ($AllowLegacyTwoComponentVersions) {
-        '^\d+\.\d+(?:\.\d+)?$'
-    }
-    else {
-        '^\d+\.\d+\.\d+$'
-    }
     $sawExact = $false
     $bestLower = $null
     $bestOverall = $null
     foreach ($candidate in @($AvailableVersions)) {
-        if ([string]::IsNullOrWhiteSpace($candidate) -or $candidate -notmatch $availableVersionPattern) {
+        if ([string]::IsNullOrWhiteSpace($candidate) -or $candidate -notmatch '^\d+\.\d+\.\d+$') {
             throw "Marketplace compatibility response contains malformed version '$candidate'."
         }
         if (-not $seen.Add($candidate)) {
@@ -166,37 +157,6 @@ function Test-StatsProMarketplaceVersionSelection {
     return $accepted -ccontains $SelectedVersion
 }
 
-function Resolve-StatsProWowInterfaceVersions {
-    param(
-        [string[]]$AvailableVersions,
-        [string[]]$RequiredVersions
-    )
-
-    $selected = @()
-    foreach ($requiredVersion in @($RequiredVersions)) {
-        $chosen = Select-StatsProOrdinalMarketplaceVersion `
-            -AvailableVersions $AvailableVersions `
-            -RequestedVersion $requiredVersion `
-            -AllowLegacyTwoComponentVersions
-        if (-not (Test-StatsProMarketplaceVersionSelection `
-                -RequestedVersion $requiredVersion `
-                -SelectedVersion $chosen `
-                -RequiredVersions $RequiredVersions `
-                -AllowEarlierRequiredVersions)) {
-            $allowed = @(Get-StatsProAcceptedMarketplaceVersions `
-                -Version $requiredVersion `
-                -RequiredVersions $RequiredVersions `
-                -AllowEarlierRequiredVersions)
-            throw "WoWInterface would select unsupported fallback '$chosen' for '$requiredVersion'; allowed: $($allowed -join ', ')."
-        }
-        if ($selected -notcontains $chosen) {
-            $selected += $chosen
-        }
-    }
-
-    return @($selected | Sort-Object { [version]$_ } -Descending)
-}
-
 function Resolve-StatsProCurseForgeVersionIdMap {
     param([string]$Json, [string[]]$RequiredVersions, [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail')
 
@@ -228,18 +188,6 @@ function Resolve-StatsProCurseForgeVersionIdMap {
         $ids += $id
     }
     return @($ids)
-}
-
-function Resolve-StatsProWowInterfaceVersionsFromJson {
-    param([string]$Json, [string[]]$RequiredVersions)
-
-    $items = @(ConvertFrom-JsonCompat $Json)
-    $availableVersions = @($items | Where-Object {
-        [string]$_.game -ceq "Retail"
-    } | ForEach-Object { [string]$_.id })
-    return @(Resolve-StatsProWowInterfaceVersions `
-        -AvailableVersions $availableVersions `
-        -RequiredVersions $RequiredVersions)
 }
 
 function Resolve-StatsProWagoVersionSelection {
@@ -326,23 +274,6 @@ function Resolve-StatsProWagoVersionSelection {
     }
 
     return @($selected | Sort-Object { [version]$_ } -Descending)
-}
-
-function Assert-StatsProWowInterfaceProjectAccess {
-    param([string]$Json, [string]$ExpectedProjectId)
-
-    try {
-        $items = @(ConvertFrom-JsonCompat $Json)
-    }
-    catch {
-        throw "WoWInterface project-access response contained invalid JSON."
-    }
-    $projectMatches = @($items | Where-Object {
-        $null -ne $_.id -and [System.StringComparer]::Ordinal.Equals([string]$_.id, $ExpectedProjectId)
-    })
-    if ($projectMatches.Count -ne 1) {
-        throw "WoWInterface credential must expose exactly one StatsPro project '$ExpectedProjectId'; found $($projectMatches.Count)."
-    }
 }
 
 function Assert-StatsProWagoProjectPage {

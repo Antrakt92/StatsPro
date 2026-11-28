@@ -5432,7 +5432,8 @@ do
     if addon.forever.enabled then
         -- Separate envelopes prevent silently importing another client's stat choices.
         transfer.prefix = "SPF1:"
-        transfer.legacyOptionalStat = "showOffhandHit"
+        -- Newest first: each older published schema omits a suffix of additions.
+        transfer.legacyStatsNewestFirst = { "showHealthRegen", "showOffhandHit" }
         local known = {}
         for _, field in ipairs(transfer.fields) do known[field.id] = true end
         for _, group in ipairs({ "character", "offensive", "defensive", "utility" }) do
@@ -5802,19 +5803,22 @@ function addon.profileTransfer.Parse(value)
             expectedCount = expectedCount + addon.profileTransfer.sectionFieldCounts[section]
         end
     end
-    local legacyOptionalStat = addon.profileTransfer.legacyOptionalStat
-    if sections.stats and legacyOptionalStat and not seen[legacyOptionalStat]
-        and fieldCount == expectedCount - 1 then
-        -- The first published SPF1 stats schema predates Offhand Hit.
-        package.omittedLegacyStat = legacyOptionalStat
-        expectedCount = expectedCount - 1
+    local legacyStats = addon.profileTransfer.legacyStatsNewestFirst
+    local omittedLegacyStats = {}
+    if sections.stats and legacyStats then
+        for _, fieldID in ipairs(legacyStats) do
+            if seen[fieldID] then break end
+            omittedLegacyStats[fieldID] = true
+            expectedCount = expectedCount - 1
+        end
     end
     if fieldCount ~= expectedCount then return nil, "invalid", "field-count" end
     for _, field in ipairs(addon.profileTransfer.fields) do
-        if sections[field.section] and not seen[field.id] and field.id ~= package.omittedLegacyStat then
+        if sections[field.section] and not seen[field.id] and not omittedLegacyStats[field.id] then
             return nil, "invalid", "missing:" .. field.id
         end
     end
+    if next(omittedLegacyStats) then package.omittedLegacyStats = omittedLegacyStats end
     return package
 end
 
@@ -5832,7 +5836,7 @@ function addon.profileTransfer.BuildImportedSettings(targetSettings, package, se
         targetSettings, nil, cloneBudget)
     if not copied or not addon.dbRuntime.IsCleanTable(settings) then return nil, "clone-failed" end
     for _, field in ipairs(addon.profileTransfer.fields) do
-        if selected[field.section] and field.id ~= package.omittedLegacyStat then
+        if selected[field.section] and not (package.omittedLegacyStats and package.omittedLegacyStats[field.id]) then
             local fieldID = field.id
             if type(fieldID) ~= "string" then return nil, "invalid" end
             local value = rawget(package.values, fieldID)
@@ -13323,7 +13327,7 @@ local EVENT_HANDLERS = {
     -- enabled permanently so right-click Settings works even while locked.
     PLAYER_REGEN_ENABLED        = function()
         if addon.forever.enabled then
-            addon.forever.NoteManaCombatTransition(false)
+            addon.forever.NoteRegenCombatTransition(false)
         end
         SAFE_NUM.ReopenScaledFormatterRetries()
         SAFE_NUM.RecoverSecretFormatter()
@@ -13359,7 +13363,7 @@ local EVENT_HANDLERS = {
         end
     end,
     PLAYER_REGEN_DISABLED       = function()
-        if addon.forever.enabled then addon.forever.NoteManaCombatTransition(true) end
+        if addon.forever.enabled then addon.forever.NoteRegenCombatTransition(true) end
         cached.repairCostCombat = nil
         addon.durabilityRuntime.postCombatRecovery = nil
         addon.durabilityRuntime.postAuctionRecovery = nil

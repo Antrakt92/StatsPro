@@ -59,7 +59,7 @@ for _, rows in pairs(F.rows) do
 end
 local count = 0
 for _ in pairs(catalogue) do count = count + 1 end
-assert(count == 46, "catalogue completeness")
+assert(count == 47, "catalogue completeness")
 local function Expect(key, expected, expectedState)
     local value, state = catalogue[key].Read()
     assert(rawequal(value, expected), key .. " value")

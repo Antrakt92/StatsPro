@@ -170,7 +170,7 @@ for _, class in ipairs(classes) do
     test.cacheSettings()
     local blocks = test.buildRenderBlocks()
     local total = #blocks[1].labels + #blocks[2].labels + #blocks[3].labels + #blocks[4].labels
-    check(total == 46, class .. " can select all 46 supported rows")
+    check(total == 47, class .. " can select all 47 supported rows")
     for _, rows in pairs(addon.forever.rows) do
         for _, row in ipairs(rows) do
             check(settings.colors[row.colorKey] ~= nil, class .. " editable color for " .. row.key)

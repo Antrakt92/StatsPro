@@ -396,38 +396,48 @@ local function ReadManaRegenMP5(index, sample)
     return Classify(value * 5)
 end
 
-local manaCombatHint
+local regenCombatHint
 
-function F.NoteManaCombatTransition(inCombat)
+function F.NoteRegenCombatTransition(inCombat)
     -- Bridge event/API ordering for one HUD refresh. A missing or spurious event
     -- must not keep this row on the wrong rate for the rest of the session.
     local hint = { inCombat = inCombat }
-    manaCombatHint = hint
+    regenCombatHint = hint
     local timer = C_Timer
     if type(timer) ~= "table" or type(timer.After) ~= "function" or not pcall(timer.After, 1, function()
-        if manaCombatHint == hint then manaCombatHint = nil end
+        if regenCombatHint == hint then regenCombatHint = nil end
     end) then
-        manaCombatHint = nil
+        regenCombatHint = nil
     end
+end
+
+local function ReadRegenCombatState()
+    local inCombat = addon.profileRuntime.ReadCombatState()
+    if regenCombatHint then
+        if regenCombatHint.inCombat == inCombat then
+            regenCombatHint = nil
+        else
+            inCombat = regenCombatHint.inCombat
+        end
+    end
+    return inCombat
 end
 
 local function ReadAdaptiveManaRegenMP5(showBaseAlongsideCasting, sample)
     -- Profiles that select both rows keep distinct fixed rates.
     local inCombat = false
-    if not showBaseAlongsideCasting then
-        inCombat = addon.profileRuntime.ReadCombatState()
-        if manaCombatHint then
-            if manaCombatHint.inCombat == inCombat then
-                manaCombatHint = nil
-            else
-                inCombat = manaCombatHint.inCombat
-            end
-        end
-    end
+    if not showBaseAlongsideCasting then inCombat = ReadRegenCombatState() end
     if inCombat == nil then return nil, "unknown" end
     local value, state = ReadManaRegenMP5(inCombat and 2 or 1, sample)
     -- Hide Zero must remember a separate clean result for each rate.
     return value, state, inCombat and ":casting" or ":resting"
+end
+
+local function ReadHealthRegen()
+    local inCombat = ReadRegenCombatState()
+    if inCombat == nil then return nil, "unknown" end
+    local value, state = Read("GetHealthRegen", inCombat and 2 or 1)
+    return value, state, inCombat and ":combat" or ":resting"
 end
 
 -- The C formatter scales by 5 while keeping the result display-only.
@@ -516,16 +526,18 @@ Row("defensive", "BlockValue", "Block Value", Scalar("GetShieldBlock", 1), "numb
 for _, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
     Row("defensive", name .. "Resistance", name .. " Resistance", function() return ReadResistance(name) end)
 end
-local function ManaRow(key, label, read, seconds, fallbackLabel)
-    local row = Row("utility", key, label, read)
+local function RegenRow(key, label, read, seconds, fallbackLabel)
+    local row = Row("utility", key, label, read, "number", "foreverRegen")
     row.rateSeconds = seconds
     row.restrictedMP5FallbackLabel = fallbackLabel
+    return row
 end
-ManaRow("ManaRegen", "Mana Regen / sec", function(sample) return ReadManaRegen(1, sample) end, 1)
-ManaRow("CastingManaRegen", "Casting Mana Regen / sec", function(sample) return ReadManaRegen(2, sample) end, 1)
-ManaRow("ManaRegenMP5", "Mana Regen / 5 sec", ReadAdaptiveManaRegenMP5, 5, "Mana Regen / sec")
-ManaRow("CastingManaRegenMP5", "Casting Mana Regen / 5 sec",
+RegenRow("ManaRegen", "Mana Regen / sec", function(sample) return ReadManaRegen(1, sample) end, 1)
+RegenRow("CastingManaRegen", "Casting Mana Regen / sec", function(sample) return ReadManaRegen(2, sample) end, 1)
+RegenRow("ManaRegenMP5", "Mana Regen / 5 sec", ReadAdaptiveManaRegenMP5, 5, "Mana Regen / sec")
+RegenRow("CastingManaRegenMP5", "Casting Mana Regen / 5 sec",
     function(sample) return ReadManaRegenMP5(2, sample) end, 5, "Casting Mana Regen / sec")
+RegenRow("HealthRegen", "Health Regen / sec", ReadHealthRegen, 1).showDashWhenUnavailable = true
 Row("utility", "MovementSpeed", "Movement Speed", MovementSpeed, "movement", "speed")
 
 F.defaults.showMainStat = false
@@ -703,7 +715,6 @@ for _, rows in pairs(F.rows) do
         elseif key:match("Hit$") then row.colorKey = "foreverHit"
         elseif key:match("Expertise$") then row.colorKey = "foreverExpertise"
         elseif key:match("AttackPower$") then row.colorKey = "foreverAttackPower"
-        elseif key:match("ManaRegen") then row.colorKey = "foreverRegen"
         elseif key == "HealingPower" then row.colorKey = "foreverHealing"
         elseif key == "Defense" or key == "ArmorPenetration" or key == "SpellPenetration" then row.colorKey = "forever" .. key
         elseif key:match("^SpellPower") then row.colorKey = "forever" .. key:sub(11)
@@ -761,6 +772,20 @@ local vocabulary = {
 }
 vocabulary.enGB = vocabulary.enUS
 vocabulary.esMX = vocabulary.esES
+local healthRegenLabels = {
+    enUS = { "Health Regen / sec", "HP/s" },
+    deDE = { "Lebensregeneration / Sek.", "LP/s" },
+    esES = { "Regeneración de salud / s", "PS/s" },
+    frFR = { "Régénération de vie / s", "PV/s" },
+    itIT = { "Rigenerazione salute / sec", "Sal/s" },
+    ptBR = { "Regeneração de vida / s", "Vida/s" },
+    ruRU = { "Восстановление здоровья / сек", "Здор/с" },
+    koKR = { "생명력 회복 / 초", "생명력/초" },
+    zhCN = { "生命恢复 / 秒", "生命/秒" },
+    zhTW = { "生命恢復 / 秒", "生命/秒" },
+}
+healthRegenLabels.enGB = healthRegenLabels.enUS
+healthRegenLabels.esMX = healthRegenLabels.esES
 local function Parts(text)
     local result = {}
     for part in text:gmatch("[^|]+") do result[#result + 1] = part end
@@ -777,7 +802,7 @@ for locale, words in pairs(vocabulary) do
     for _, rows in pairs(F.rows) do
         for _, row in ipairs(rows) do
             local key = row.key
-            local text = components[key]
+            local text = key == "HealthRegen" and healthRegenLabels[locale][1] or components[key]
             if not text then
                 local mode, stat = key:match("^(Melee)(.+)$")
                 if not mode then mode, stat = key:match("^(Ranged)(.+)$") end
@@ -823,7 +848,8 @@ for locale, components in pairs(localeComponents) do
     for _, rows in pairs(F.rows) do
         for _, row in ipairs(rows) do
             local key = row.key
-            local short = components[key] and Abbreviate(components[key])
+            local short = key == "HealthRegen" and healthRegenLabels[locale][2]
+                or components[key] and Abbreviate(components[key])
             local mode, stat = key:match("^(Melee)(.+)$")
             if not mode then mode, stat = key:match("^(Ranged)(.+)$") end
             if not mode then mode, stat = key:match("^(Spell)(.+)$") end

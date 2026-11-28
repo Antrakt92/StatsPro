@@ -222,10 +222,11 @@ do
     check(legacy.values.showMeleeHit == true and legacy.values.showSpellCrit == false,
         "legacy transfer retains explicit stat choices")
     check(legacy.values.showOffhandHit == nil, "legacy transfer has no Offhand Hit choice")
-    local destination = { showOffhandHit = true, showMeleeHit = false, showSpellCrit = true }
+    local destination = { showOffhandHit = true, showMeleeHit = false, showSpellCrit = true, showHealthRegen = true }
     local imported = transfer.BuildImportedSettings(destination, legacy, { stats = true })
     check(imported and imported.showOffhandHit == true and imported.showMeleeHit == true
-        and imported.showSpellCrit == false, "legacy import preserves the destination's Offhand Hit")
+        and imported.showSpellCrit == false and imported.showHealthRegen == true,
+        "legacy import preserves the destination's later stat choices")
     check(destination.showMeleeHit == false, "legacy import builds detached settings")
     destination.showOffhandHit = nil
     imported = transfer.BuildImportedSettings(destination, legacy, { stats = true })
@@ -236,6 +237,17 @@ do
     imported = transfer.BuildImportedSettings(destination, current, { stats = true })
     check(imported and imported.showOffhandHit == current.values.showOffhandHit,
         "current import still applies its explicit Offhand Hit choice")
+    check(imported.showHealthRegen == false, "current import applies its explicit disabled HP regeneration")
+    local previousPayload = assert(transfer.Base64Decode(export:match("^SPF1:%x+:([A-Za-z0-9+/=]+)")))
+    previousPayload = previousPayload:gsub("\nshowHealthRegen=[^\n]+", "", 1)
+    local previous = transfer.Parse(test.profileTransfer.encodePayload(previousPayload))
+    check(previous and previous.values.showOffhandHit ~= nil and previous.values.showHealthRegen == nil,
+        "Forever profiles from immediately before HP regeneration parse")
+    imported = transfer.BuildImportedSettings(destination, previous, { stats = true })
+    check(imported.showHealthRegen == true, "previous export preserves the destination's HP regeneration")
+    local missingOffhand = previousPayload:gsub("\nshowOffhandHit=[^\n]+", "", 1)
+    check(transfer.Parse(test.profileTransfer.encodePayload(missingOffhand .. "\nshowHealthRegen=1")) == nil,
+        "new HP regeneration cannot replace missing Offhand Hit")
     local payload = assert(transfer.Base64Decode(legacyText:match("^SPF1:%x+:([A-Za-z0-9+/=]+)")))
     local malformed, removed = payload:gsub("\nshowMeleeHit=[^\n]+", "", 1)
     check(removed == 1, "legacy fixture includes Melee Hit")
@@ -550,6 +562,51 @@ local function hasStat(block, label, expected)
         end
     end
     return false
+end
+do
+    local inCombat, resting, fighting = false, 18.25, nil
+    local healthEnv, healthAddon, healthTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        unitGUID = function() return "Player-ForeverHealthRegen" end,
+        inCombatLockdown = function() return inCombat end,
+        foreverAPIs = { GetHealthRegen = function() return resting, fighting end },
+    })
+    healthEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local settings = healthTest.profileState().settings
+    check(settings.showHealthRegen == false, "HP regeneration is opt-in on existing and fresh profiles")
+    settings.displayMode, settings.showTertiary, settings.hideZeroTertiary = "flat", true, false
+    healthTest.cacheSettings()
+    healthAddon:OpenConfigMenu()
+    local control = assert(healthEnv.StatsProForeverHealthRegen)
+    control:SetChecked(true)
+    control.scripts.OnClick(control)
+    check(healthTest.profileState().settings.showHealthRegen == true, "the Utility checkbox enables HP regeneration")
+    local function displays(value)
+        for _, block in ipairs(healthTest.buildRenderBlocks()) do
+            if block.splitKey == "splitTertiary" then return hasStat(block, "Health Regen / sec", value) end
+        end
+    end
+    check(displays("18.25"), "HUD displays the unscaled out-of-combat rate")
+    healthEnv.__fireEvent("PLAYER_REGEN_DISABLED")
+    check(displays("—"), "first unavailable combat rate does not reuse an out-of-combat rate")
+    inCombat, fighting = true, 2.50
+    check(displays("2.50"), "HUD uses the combat rate without changing the label")
+    fighting = nil
+    check(displays("2.50"), "unavailable combat rate keeps the last reliable combat value")
+    fighting = 0
+    check(displays("0.00"), "a real zero replaces last-known HP regeneration")
+    settings.hideZeroTertiary = true
+    healthTest.cacheSettings()
+    check(not displays("0.00"), "Hide Zero suppresses zero HP regeneration")
+    resting = 20.75
+    healthEnv.__fireEvent("PLAYER_REGEN_ENABLED")
+    check(displays("20.75"), "combat-end event restores the out-of-combat rate before the combat API settles")
+    local code = healthAddon.profileTransfer.Serialize("HP regen", settings, { stats = true })
+    local parsed = assert(healthAddon.profileTransfer.Parse(code))
+    local imported = healthAddon.profileTransfer.BuildImportedSettings({}, parsed, { stats = true })
+    check(imported.showHealthRegen == true, "HP regeneration survives stats export and import")
+    check(retailEnv.StatsProForeverHealthRegen == nil and not retailAddon.profileTransfer.fieldByID.showHealthRegen,
+        "Retail has no HP regeneration setting or transfer field")
 end
 do
     local readable, dead, inCombat, rejectHaste = false, false, false, false

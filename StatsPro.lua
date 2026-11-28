@@ -15723,7 +15723,9 @@ end
 
 function addon.settingsDesign.RequestResponsiveFrameResize()
     local settings = isLoaded and addon.dbRuntime.GetActiveSettings()
+    local welcome = addon.hudPresets.welcome
     if not addon.settingsUI.frame and type(addon.profileUI.ApplyManagerSize) ~= "function"
+        and not (welcome and welcome:IsVisible())
         and not (settings and (mainPanel:HasViewportSensitivePosition(settings)
             or defensivePanel:HasViewportSensitivePosition(settings))) then return end
     local attempt = 0
@@ -15748,18 +15750,21 @@ function addon.settingsDesign.RequestResponsiveFrameResize()
         end
         local settingsFrame = addon.settingsUI.frame
         local manager = addon.profileUI.manager
+        local operation = addon.profileUI.operationDialog
         local settingsShown = settingsFrame and settingsFrame:IsVisible()
-        local managerShown = manager and manager:IsVisible()
+        local profilesShown = (manager and manager:IsVisible()) or (operation and operation:IsVisible())
+        local welcomeShown = welcome and welcome:IsVisible()
         local applyManager = addon.profileUI.ApplyManagerSize
         -- Give each shown window one fresh viewport read after the first pass.
         -- The sizing methods already skip the native resize at matching dimensions.
         if settingsFrame and (attempt == 1 or (attempt == 2 and settingsShown)) then
             pcall(addon.settingsUI.ApplyFrameSize, addon)
         end
-        if type(applyManager) == "function" and (attempt == 1 or (attempt == 2 and managerShown)) then
+        if type(applyManager) == "function" and (attempt == 1 or (attempt == 2 and profilesShown)) then
             pcall(applyManager)
         end
-        local retryWindows = attempt == 1 and (settingsShown or managerShown)
+        if welcomeShown then pcall(addon.hudPresets.ApplyWelcomeScale, welcome) end
+        local retryWindows = attempt == 1 and (settingsShown or profilesShown or welcomeShown)
         if retryPositions or retryWindows then RunCoalesced("responsiveFrameSize", 0.1, refresh) end
     end
     RunCoalesced("responsiveFrameSize", 0, refresh)
@@ -15783,6 +15788,13 @@ end
 
 function addon.settingsDesign.ReadUIParentWidth()
     return addon.settingsDesign.ReadUIParentDimension("GetWidth")
+end
+
+function addon.settingsDesign.ApplyViewportScale(frame, width, height, parentScale)
+    if not width or not height or width <= 32 or height <= 32 then return end
+    local scale = math.min(1, (width - 32) / (frame:GetWidth() * parentScale),
+        (height - 32) / (frame:GetHeight() * parentScale))
+    if frame:GetScale() ~= scale then frame:SetScale(scale) end
 end
 
 -- CreateConfigSlider: standard label-on-top + horizontal slider pattern used across
@@ -16490,6 +16502,11 @@ function addon.hudPresets.SuspendWelcomeForCombat()
     return true
 end
 
+function addon.hudPresets.ApplyWelcomeScale(frame)
+    addon.settingsDesign.ApplyViewportScale(frame, addon.settingsDesign.ReadUIParentWidth(),
+        addon.settingsDesign.ReadUIParentHeight(), 1)
+end
+
 function addon.hudPresets.BuildWelcome()
     if addon.hudPresets.welcome then return addon.hudPresets.welcome end
     local frame = CreateFrame("Frame", "StatsProQuickSetupWelcome", UIParent,
@@ -16559,14 +16576,7 @@ function addon.hudPresets.BuildWelcome()
         -- Card count drives the content footprint. Keep both actions and their
         -- bottom padding inside the window, including the sharing warning.
         frame:SetHeight(math.max(438, math.abs(actionY) + apply:GetHeight() + 22))
-        if addon.forever.enabled then
-            local width, height = UIParent:GetWidth(), UIParent:GetHeight()
-            if SAFE_NUM.IsCleanFiniteNumber(width) and SAFE_NUM.IsCleanFiniteNumber(height)
-                and width > 32 and height > 32 then
-                frame:SetScale(math.min(1, (width - 32) / frame:GetWidth(),
-                    (height - 32) / frame:GetHeight()))
-            end
-        end
+        addon.hudPresets.ApplyWelcomeScale(frame)
         cancel:ClearAllPoints()
         cancel:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -220, actionY)
         apply:ClearAllPoints()
@@ -17778,6 +17788,7 @@ function addon.profileUI.BuildOperationUI(manager)
             addon.windowLayers.Attach(addon, dialog, 30)
         end
         dialog:SetParent(owner)
+        ui.ApplyManagerSize()
         dialog:SetFrameLevel(blocker:GetFrameLevel() + 1)
         dialog:ClearAllPoints()
         dialog:SetPoint("CENTER", owner, "CENTER", 0, 0)
@@ -18751,6 +18762,12 @@ function addon.profileUI.BuildSettingsUI(owner)
         if ui.managerWidth ~= width or ui.managerHeight ~= height then
             manager:SetSize(width, height)
             ui.managerWidth, ui.managerHeight = width, height
+        end
+        addon.settingsDesign.ApplyViewportScale(manager, parentWidth, parentHeight, 1)
+        local dialog = ui.operationDialog
+        if dialog then
+            local parentScale = dialog:GetParent() == manager and manager:GetScale() or 1
+            addon.settingsDesign.ApplyViewportScale(dialog, parentWidth, parentHeight, parentScale)
         end
         if detailProfile then
             detailProfile:SetWidth(math.max(1, width - geometry.managerDetailInset))

@@ -1805,4 +1805,41 @@ do
     subject.GetBestCritChance()
     check(spellReads == 4, "a valid smaller school limit still controls the scan")
 end
+for _, forever in ipairs({ false, true }) do
+    local flavor = forever and "Forever" or "Retail"
+    local client, _, view = fixtures.loadStatsPro("enUS", {
+        forever = forever,
+        statsProDB = {},
+        testWelcomeEnabled = true,
+        uiParentWidth = 390,
+        uiParentHeight = 300,
+        unitGUID = function() return "Player-Welcome-Viewport" end,
+        specID = 73,
+    })
+    client.__fireEvent("PLAYER_ENTERING_WORLD")
+    check(view.hudPresets.maybeShowWelcome(), flavor .. " first-run Quick Setup opens")
+    local welcome = client.StatsProQuickSetupWelcome
+    local function fits(width, height)
+        local scale = welcome:GetScale()
+        return welcome:GetWidth() * scale <= width and welcome:GetHeight() * scale <= height
+    end
+    check(fits(390, 300), flavor .. " first-run Quick Setup fits a narrow viewport")
+
+    client.UIParent:SetSize(500, 220)
+    client.__fireEvent("DISPLAY_SIZE_CHANGED")
+    client.__flushTimers(0)
+    check(fits(500, 220), flavor .. " visible Quick Setup shrinks with the viewport")
+
+    -- The viewport can settle after the initial display callback.
+    client.UIParent:SetSize(500, 190)
+    client.__flushTimers(0.1)
+    check(fits(500, 190), flavor .. " visible Quick Setup retries using the settled viewport")
+
+    client.UIParent:SetSize(1000, 800)
+    client.__fireEvent("UI_SCALE_CHANGED")
+    client.__flushTimers(0)
+    check(welcome:GetScale() == 1, flavor .. " Quick Setup restores its normal scale")
+    check(welcome:IsShown() and not view.hudPresets.state().welcomeSeen,
+        flavor .. " responsive resize preserves the active first-run prompt")
+end
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

@@ -102,4 +102,60 @@ for _, forever in ipairs({ false, true }) do
     end
 end
 
-print("Retail and Forever profile transfer positions and fonts passed")
+for _, forever in ipairs({ false, true }) do
+    local flavor = forever and "Forever" or "Retail"
+    local env, addon = fixtures.loadStatsPro("enUS", {
+        forever = forever, uiParentWidth = 500, uiParentHeight = 260,
+        unitGUID = function() return "Player-1-Profile-Viewport" end,
+        getSpecialization = function() return 1 end, specID = 73,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    addon:OpenConfigMenu()
+    local function click(name)
+        local control = assert(env[name], name)
+        assert(control:IsVisible() and control:IsEnabled(), name .. " is unavailable")
+        control.scripts.OnClick(control, "LeftButton")
+    end
+    local function fits(frame, inheritedScale)
+        local scale = frame:GetScale() * inheritedScale
+        return frame:GetWidth() * scale <= env.UIParent:GetWidth()
+            and frame:GetHeight() * scale <= env.UIParent:GetHeight()
+    end
+    click("StatsProManageProfilesButton")
+    click("StatsProProfileAdvancedButton")
+    click("StatsProProfileResetButton")
+    local manager = env.StatsProProfileManager
+    local dialog = env.StatsProProfileOperationDialog
+    assert(dialog:IsVisible() and dialog:GetParent() == manager, "confirmation is attached to Profiles")
+    assert(fits(manager, 1), flavor .. " Profiles fits the initial narrow viewport")
+    assert(fits(dialog, manager:GetScale()), flavor .. " confirmation fits the initial narrow viewport")
+
+    env.UIParent:SetSize(420, 220)
+    env.__fireEvent("DISPLAY_SIZE_CHANGED")
+    env.__flushTimers(0)
+    assert(fits(manager, 1) and fits(dialog, manager:GetScale()), "Profiles and confirmation shrink together")
+    env.UIParent:SetSize(390, 170)
+    env.__flushTimers(0.1)
+    assert(fits(manager, 1) and fits(dialog, manager:GetScale()), "nested confirmation fits the settled size")
+    local nestedScale = dialog:GetScale() * manager:GetScale()
+
+    click("StatsProProfileOperationCancelButton")
+    env.StatsProConfigFrame:Hide()
+    assert(addon.profileUI.ShowSelfTestExport("Test report", "Test summary"))
+    assert(dialog:IsVisible() and dialog:GetParent() == env.UIParent, "report opens with Profiles closed")
+    assert(fits(dialog, 1) and math.abs(dialog:GetScale() - nestedScale) < 1e-9,
+        "standalone report discards inherited scale")
+    env.UIParent:SetSize(390, 145)
+    env.__fireEvent("DISPLAY_SIZE_CHANGED")
+    env.__flushTimers(0)
+    assert(fits(dialog, 1), "standalone report resizes with Profiles and Settings hidden")
+    env.UIParent:SetSize(390, 105)
+    env.__flushTimers(0.1)
+    assert(fits(dialog, 1), "standalone report retries after the viewport settles")
+    env.UIParent:SetSize(1000, 800)
+    env.__fireEvent("UI_SCALE_CHANGED")
+    env.__flushTimers(0)
+    assert(manager:GetScale() == 1 and dialog:GetScale() == 1, "both windows return to normal scale")
+end
+
+print("Retail and Forever profile transfer positions, fonts and dialog sizing passed")

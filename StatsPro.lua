@@ -12263,9 +12263,16 @@ function addon.forever.ReadHUDRow(definition, sample)
 end
 
 addon.forever.lastCleanValues = {}
+addon.forever.pendingHUDZeros = {}
+addon.forever.hudSample = 0
 
-function addon.forever.InvalidateStatValues()
-    addon.forever.lastCleanValues = {}
+function addon.forever.InvalidateStatContext()
+    -- The context invalidates source parity and zero-based visibility. Keep
+    -- readable nonzero HUD samples until the new context supplies a value.
+    for key, value in pairs(addon.forever.lastCleanValues) do
+        if value == 0 then addon.forever.lastCleanValues[key] = nil end
+    end
+    addon.forever.pendingHUDZeros = {}
     addon.forever.ResetAttackPowerParity()
 end
 
@@ -12316,7 +12323,23 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
                 value = addon.movementRuntime.ResolvePercent(value)
                 if not SAFE_NUM.IsCleanFiniteNumber(value) then state = "unknown" end
             end
-            if state == "clean" then lastClean[rowKey] = value end
+            local pending = addon.forever.pendingHUDZeros
+            if (group ~= "utility" or definition.key == "HealthRegen") and state == "clean" and value == 0
+                and lastClean[rowKey] ~= nil and lastClean[rowKey] ~= 0 then
+                -- A single zero between readable samples can be transitional.
+                -- Reflows and previews in the same refresh cannot confirm it.
+                local sampleNumber = addon.forever.hudSample
+                if pending[rowKey] ~= sampleNumber - 1 then
+                    pending[rowKey] = sampleNumber
+                    state = "unknown"
+                end
+            else
+                pending[rowKey] = nil
+            end
+            if state == "clean" then
+                lastClean[rowKey] = value
+                pending[rowKey] = nil
+            end
             local fallback = lastClean[rowKey]
             -- A protected value may render live. Only a prior clean zero can hide it.
             local visible = not hideZero or (fallback ~= nil and fallback ~= 0)
@@ -13151,6 +13174,7 @@ tickerFrame:SetScript("OnUpdate", function(self, elapsed)
     end
     timeSinceLastUpdate = timeSinceLastUpdate + elapsed
     if timeSinceLastUpdate >= cached.updateInterval then
+        if addon.forever.enabled then addon.forever.hudSample = addon.forever.hudSample + 1 end
         addon:RunUpdateStatsSafe()
         timeSinceLastUpdate = 0
     end
@@ -13216,7 +13240,7 @@ end
 local function OnPlayerEnteringWorld()
     if addon.forever.enabled then
         addon.forever.compoundForm = addon.forever.ReadCompoundForm()
-        addon.forever.InvalidateStatValues()
+        addon.forever.InvalidateStatContext()
         addon.forever.ReopenTooltipFont()
     end
     SAFE_NUM.ReopenScaledFormatterRetries()
@@ -13345,7 +13369,8 @@ local EVENT_HANDLERS = {
     ITEM_DATA_LOAD_RESULT       = addon.durabilityRuntime.OnItemDataReady,
     PLAYER_EQUIPMENT_CHANGED    = function()
         if addon.forever.enabled then
-            addon.forever.InvalidateStatValues()
+            addon.forever.InvalidateStatContext()
+            timeSinceLastUpdate = cached.updateInterval or 0.5
         else
             addon.archonTargets.InvalidateComparisonCache()
             local tooltip = addon.archonTargets.tooltip
@@ -13399,6 +13424,8 @@ local EVENT_HANDLERS = {
     PLAYER_REGEN_ENABLED        = function()
         if addon.forever.enabled then
             addon.forever.NoteRegenCombatTransition(false)
+            addon.forever.pendingHUDZeros = {}
+            timeSinceLastUpdate = cached.updateInterval or 0.5
         end
         SAFE_NUM.ReopenScaledFormatterRetries()
         SAFE_NUM.RecoverSecretFormatter()
@@ -13434,7 +13461,11 @@ local EVENT_HANDLERS = {
         end
     end,
     PLAYER_REGEN_DISABLED       = function()
-        if addon.forever.enabled then addon.forever.NoteRegenCombatTransition(true) end
+        if addon.forever.enabled then
+            addon.forever.NoteRegenCombatTransition(true)
+            addon.forever.pendingHUDZeros = {}
+            timeSinceLastUpdate = cached.updateInterval or 0.5
+        end
         cached.repairCostCombat = nil
         addon.durabilityRuntime.postCombatRecovery = nil
         addon.durabilityRuntime.postAuctionRecovery = nil
@@ -13455,7 +13486,7 @@ local EVENT_HANDLERS = {
 if addon.forever.enabled then
     -- These are the talent changes consumed by the Forever character sheet.
     local function onForeverStatContextChanged()
-        addon.forever.InvalidateStatValues()
+        addon.forever.InvalidateStatContext()
         timeSinceLastUpdate = cached.updateInterval or 0.5
     end
     EVENT_HANDLERS.PLAYER_TALENT_UPDATE = onForeverStatContextChanged

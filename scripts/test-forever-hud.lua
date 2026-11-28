@@ -5,6 +5,15 @@ local function check(ok, name)
     count = count + 1
     assert(ok, name)
 end
+local function tickHUD(env, elapsed)
+    for _, frame in ipairs(env.__frames) do
+        if frame.scripts and frame.scripts.OnUpdate then
+            frame.scripts.OnUpdate(frame, elapsed)
+            return
+        end
+    end
+    error("Forever HUD ticker not found")
+end
 local combat = false
 local value = 0
 local restricted = false
@@ -158,7 +167,9 @@ do
         "unreadable casting MP5 does not reuse resting MP5")
     available, crit, strength = true, 0, 50
     check(valueFor("utility", "Mana Regen / 5 sec"):find("5.00", 1, true), "clean casting MP5 takes priority")
-    check(valueFor("offensive", "Melee Crit") == "", "clean zero follows Hide Zero")
+    check(valueFor("offensive", "Melee Crit"):find("5.00%", 1, true), "first zero preserves crit")
+    tickHUD(moveEnv, 5)
+    check(valueFor("offensive", "Melee Crit") == "", "confirmed clean zero follows Hide Zero")
     crit = secretCrit
     check(valueFor("offensive", "Melee Crit") == "", "protected crit preserves the last clean zero for Hide Zero")
     check(valueFor("offensive", "Melee Crit", true):find("7%", 1, true), "disabling Hide Zero exposes the protected live crit")
@@ -173,7 +184,7 @@ do
     moveEnv.__fireEvent("PLAYER_REGEN_ENABLED")
     check(valueFor("utility", "Mana Regen / 5 sec"):find("30.00", 1, true), "leaving combat returns to the resting sample")
     moveEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1)
-    check(valueFor("character", "Strength", true):find("?", 1, true), "a gear change clears the scalar fallback")
+    check(valueFor("character", "Strength", true):find("50", 1, true), "a gear change keeps the last readable stat")
 
     available = true
     for _, visibilityKey in ipairs({ "showMovementSpeed", "showTertiary", "isVisible" }) do
@@ -586,15 +597,18 @@ do
             if block.splitKey == "splitTertiary" then return hasStat(block, "Health Regen / sec", value) end
         end
     end
-    check(displays("18.25"), "HUD displays the unscaled out-of-combat rate")
+    check(displays("18.25"), "HUD displays the unscaled character-sheet rate")
     healthEnv.__fireEvent("PLAYER_REGEN_DISABLED")
-    check(displays("—"), "first unavailable combat rate does not reuse an out-of-combat rate")
-    inCombat, fighting = true, 2.50
-    check(displays("2.50"), "HUD uses the combat rate without changing the label")
-    fighting = nil
-    check(displays("2.50"), "unavailable combat rate keeps the last reliable combat value")
-    fighting = 0
-    check(displays("0.00"), "a real zero replaces last-known HP regeneration")
+    inCombat, fighting = true, 0
+    check(displays("18.25"), "zero combat-specific rate never replaces the character-sheet rate")
+    resting = 21.50
+    check(displays("21.50"), "a live change to the character-sheet rate is visible in combat")
+    resting, fighting = nil, 2.50
+    check(displays("21.50"), "unavailable character-sheet rate keeps its last reliable reading")
+    resting = 0
+    check(displays("21.50"), "a single zero preserves the last healthy sample")
+    tickHUD(healthEnv, 5)
+    check(displays("0.00"), "a confirmed zero replaces last-known HP regeneration")
     settings.hideZeroTertiary = true
     healthTest.cacheSettings()
     check(not displays("0.00"), "Hide Zero suppresses zero HP regeneration")
@@ -611,6 +625,8 @@ end
 do
     local readable, dead, inCombat, rejectHaste = false, false, false, false
     local haste, power = 25, 84
+    local crit, noHit = 7, false
+    local critReads = 0
     local form, protectedHaste, protectedForm = nil, {}, {}
     local function readDefense()
         if readable then return 20, 3 end
@@ -628,6 +644,10 @@ do
         end,
         foreverAPIs = {
             GetRangedHaste = function() if readable then return haste, 0 end end,
+            GetCritChance = function()
+                critReads = critReads + 1
+                if readable then return crit end
+            end,
             UnitRangedAttackPower = function() if readable then return power, 0, 0 end end,
             UnitAttackPower = function() if readable then return power + 1, 1, 0 end end,
             UnitDefenseSkill = readDefense,
@@ -635,8 +655,8 @@ do
             CR_HIT_MELEE = 6,
             CR_HIT_RANGED = 7,
             CR_HIT_SPELL = 8,
-            GetCombatRatingBonus = function(rating) if readable then return rating end end,
-            GetHitModifier = function() return 1 end,
+            GetCombatRatingBonus = function(rating) if readable then return noHit and 0 or rating end end,
+            GetHitModifier = function() return noHit and 0 or 1 end,
             GetOffhandHitModifier = function() return 2 end,
             GetRangedHitModifier = function() return 3 end,
             GetSpellHitModifier = function() return 4 end,
@@ -691,8 +711,8 @@ do
     readable = false
     kitEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 18)
     check(kitAddon:RunUpdateStatsSafe(), "gear change refreshes the HUD safely")
-    expectRanged("—", "—", "changed equipment discards old stats")
-    expectOtherCompound("changed equipment discards old stats", dash)
+    expectRanged("29.00%", "101", "changed equipment keeps last readable display")
+    expectOtherCompound("changed equipment keeps last readable display", live)
     for _, event in ipairs({ "PLAYER_TALENT_UPDATE", "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_LEVEL_UP", "PLAYER_ENTERING_WORLD" }) do
         readable = true
         expectRanged("29.00%", "101", event .. " seed")
@@ -704,13 +724,16 @@ do
         expectOtherCompound("unrelated update keeps the last clean value", live)
         kitEnv.__fireEvent(event)
         kitEnv.__fireEvent(event)
-        expectRanged("—", "—", event .. " clears old values even if emitted twice")
-        expectOtherCompound(event .. " clears old values", dash)
+        expectRanged("29.00%", "101", event .. " keeps readable values even if emitted twice")
+        expectOtherCompound(event .. " keeps readable values", live)
     end
     profile.hideZeroOffensive = true
     kitTest.cacheSettings()
     readable, haste = true, 0
-    check(not contains(kitTest.buildRenderBlocks()[2], "Ranged Haste"), "compound clean zero is hidden")
+    expectRanged("29.00%", "101", "first zero leaves the previous value visible")
+    expectRanged("29.00%", "101", "same-refresh zero cannot confirm a genuine zero")
+    tickHUD(kitEnv, 5)
+    check(not contains(kitTest.buildRenderBlocks()[2], "Ranged Haste"), "confirmed clean zero is hidden")
     haste = protectedHaste
     check(not contains(kitTest.buildRenderBlocks()[2], "Ranged Haste"), "compound same-context clean zero stays hidden")
     kitEnv.__fireEvent("ACTIVE_TALENT_GROUP_CHANGED")
@@ -731,7 +754,7 @@ do
     expectRanged("29.00%", "101", "duplicate normal-form event preserves last values")
     form = 1
     kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
-    expectRanged("—", "—", "new stance discards old values")
+    expectRanged("29.00%", "101", "new stance keeps old values while unreadable")
     readable, haste, power = true, 33, 105
     expectRanged("33.00%", "105", "new stance recovers")
     readable = false
@@ -739,13 +762,38 @@ do
     expectRanged("33.00%", "105", "duplicate stance event preserves new values")
     form = protectedForm
     kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
-    expectRanged("—", "—", "unreadable new stance cannot reuse old values")
+    expectRanged("33.00%", "105", "unreadable new stance keeps old values")
     readable, form = true, 1
     kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
     expectRanged("33.00%", "105", "known stance can seed after unreadable identity")
     readable, form = false, nil
     kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
-    expectRanged("—", "—", "leaving a stance discards its values")
+    expectRanged("33.00%", "105", "leaving a stance keeps its values until recovery")
+
+    profile.showMeleeCrit, profile.hideZeroOffensive = true, true
+    kitTest.cacheSettings()
+    local function expectCritHit(expectedCrit, expectedHit, phase)
+        local offense = kitTest.buildRenderBlocks()[2]
+        check(hasStat(offense, "Melee Crit", expectedCrit), phase .. " melee crit")
+        check(hasStat(offense, "Melee Hit", expectedHit), phase .. " melee hit")
+    end
+    readable = true
+    expectCritHit("7.00%", "7.00%", "before combat")
+    inCombat, form, crit, noHit = true, 1, 0, true
+    kitEnv.__fireEvent("PLAYER_REGEN_DISABLED")
+    kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
+    expectCritHit("7.00%", "7.00%", "temporary zero in new form")
+    readable, form = false, 5
+    kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
+    expectCritHit("7.00%", "7.00%", "unavailable in another form")
+    inCombat = false
+    kitEnv.__fireEvent("PLAYER_REGEN_ENABLED")
+    local beforeRecoveryTick = critReads
+    tickHUD(kitEnv, 0)
+    check(critReads > beforeRecoveryTick, "combat end schedules an immediate stat refresh")
+    expectCritHit("7.00%", "7.00%", "unavailable immediately after combat")
+    readable, crit, noHit = true, 9, false
+    expectCritHit("9.00%", "7.00%", "sources recover after combat")
 
     profile.showOffensive, profile.showTertiary = false, false
     profile.showDurability, profile.showRepairCost = false, false
@@ -804,6 +852,8 @@ check(string.find(secondRestricted, "90", 1, true), "second consecutive restrict
 check(not string.find(secondRestricted, "75", 1, true), "previous restricted scalar not cached")
 combat, restricted = false, false
 attackPower, hitBonus, hitModifier = 15, 0, 0
+test.buildRenderBlocks()
+tickHUD(env, 5)
 blocks = test.buildRenderBlocks()
 check(hasStat(blocks[2], "Attack Power", "16"), "fresh AP immediately replaces fallback")
 check(not contains(blocks[2], "Melee Hit"), "Hide Zero hides a confirmed zero")
@@ -1613,8 +1663,8 @@ do
         "active conversion uses the last validated pre-combat total")
     conversionActive = false
     apEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 16, true)
-    check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "—"),
-        "combat equipment change discards AP parity and the last clean number")
+    check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "79"),
+        "combat equipment change discards AP parity but keeps the last clean number")
     combatNow = false
     apEnv.__fireEvent("PLAYER_REGEN_ENABLED")
     check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "79"),

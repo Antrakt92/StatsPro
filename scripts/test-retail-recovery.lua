@@ -1800,10 +1800,10 @@ do
         flavor .. ": protected parry formatting failure keeps the previous reading when supported")
     if forever then
         env.__fireEvent("PLAYER_EQUIPMENT_CHANGED")
-        assert(displayedStat("splitTertiary", "Movement"):find("?%", 1, true),
-            "Forever cold protected movement preserves the percentage placeholder")
-        assert(displayedStat("splitDefensive", "Parry"):find("?%", 1, true),
-            "Forever cold protected parry preserves the percentage placeholder")
+        assert(displayedStat("splitTertiary", "Movement"):find("100%", 1, true),
+            "Forever equipment changes preserve readable movement for the same movement mode")
+        assert(displayedStat("splitDefensive", "Parry"):find("5.00%", 1, true),
+            "Forever equipment changes preserve the last readable parry")
     end
 end
 

@@ -433,13 +433,6 @@ local function ReadAdaptiveManaRegenMP5(showBaseAlongsideCasting, sample)
     return value, state, inCombat and ":casting" or ":resting"
 end
 
-local function ReadHealthRegen()
-    local inCombat = ReadRegenCombatState()
-    if inCombat == nil then return nil, "unknown" end
-    local value, state = Read("GetHealthRegen", inCombat and 2 or 1)
-    return value, state, inCombat and ":combat" or ":resting"
-end
-
 -- The C formatter scales by 5 while keeping the result display-only.
 -- A slightly smaller divisor avoids truncating an exact hundredth due to roundoff.
 local mp5Options = { breakpointData = { {
@@ -537,7 +530,9 @@ RegenRow("CastingManaRegen", "Casting Mana Regen / sec", function(sample) return
 RegenRow("ManaRegenMP5", "Mana Regen / 5 sec", ReadAdaptiveManaRegenMP5, 5, "Mana Regen / sec")
 RegenRow("CastingManaRegenMP5", "Casting Mana Regen / 5 sec",
     function(sample) return ReadManaRegenMP5(2, sample) end, 5, "Casting Mana Regen / sec")
-local healthRegen = RegenRow("HealthRegen", "Health Regen / sec", ReadHealthRegen, 1)
+-- The character sheet uses the normal rate in its Spirit tooltip. The second
+-- return is a separate combat-only rate and can legitimately be zero.
+local healthRegen = RegenRow("HealthRegen", "Health Regen / sec", Scalar("GetHealthRegen", 1), 1)
 healthRegen.colorKey = "foreverHealing"
 healthRegen.showDashWhenUnavailable = true
 Row("utility", "MovementSpeed", "Movement Speed", MovementSpeed, "movement", "speed")

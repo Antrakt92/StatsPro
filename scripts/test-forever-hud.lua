@@ -1589,6 +1589,45 @@ for _, shape in ipairs({ "old default", "previous default", "custom", "manually 
     end
 end
 do
+    local oldDefaultSwatches = {
+        crit = { r = 1, g = 0, b = 0 },
+        stamina = { r = .5, g = 1, b = .5 },
+        foreverStrength = { r = 1, g = .35, b = .3 },
+        foreverAgility = { r = .35, g = 1, b = .45 },
+        foreverIntellect = { r = .35, g = .7, b = 1 },
+        foreverSpirit = { r = .8, g = .55, b = 1 },
+        foreverDefense = { r = .65, g = .8, b = 1 },
+        foreverAttackPower = { r = 1, g = .55, b = .2 },
+        foreverRegen = { r = .35, g = .9, b = .85 },
+        foreverHealing = { r = .35, g = 1, b = .6 },
+        foreverFire = { r = 1, g = .4, b = .2 },
+        foreverResistanceFire = { r = 1, g = .4, b = .2 },
+    }
+    local function load(saved)
+        local env, _, test = fixtures.loadStatsPro("enUS", {
+            forever = true, statsProDB = saved,
+            unitGUID = function() return "Player-ForeverCustomPalette" end,
+        })
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+        return env, test
+    end
+    for _, manualColor in ipairs({ false, true }) do
+        local saved, test = load()
+        local settings = test.profileState().settings
+        for key, color in pairs(oldDefaultSwatches) do settings.colors[key] = color end
+        settings.fontSize = 17
+        test.appearancePresets.markCustom(settings)
+        if manualColor then settings.colors.foreverAgility = { r = .29, g = .76, b = .5 } end
+        local _, reloaded = load(saved.StatsProDB)
+        local result = reloaded.profileState().settings
+        check(result.fontSize == 17 and result.appearancePresetID == "custom",
+            "a color refresh keeps the custom appearance and font size")
+        check(result.colors.stamina.g == (manualColor and 1 or 224/255)
+            and result.colors.foreverAgility.r == (manualColor and .29 or 101/255),
+            "only an exact legacy palette can be upgraded for a custom appearance")
+    end
+end
+do
     local combatNow = false
     local firstAP, secondAP, protectedMultiplier = {}, {}, {}
     local currentAP = firstAP

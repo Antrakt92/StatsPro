@@ -892,6 +892,15 @@ if addon.forever.enabled then
         definitions.default.colors[key] = CopyTable(color)
         defaults.colors[key] = CopyTable(color)
     end
+    local legacyPalettes = {}
+    for id, history in pairs(previousColors) do
+        local legacy = CopyTable(definitions[id].colors)
+        for key, variants in pairs(history) do
+            legacy[key] = variants[1]
+        end
+        legacyPalettes[id] = legacy
+    end
+    addon.appearancePresets.legacyForeverPalettes = legacyPalettes
 end
 
 -- Quick Setup presets are deliberately functional rather than visual. They own
@@ -16137,9 +16146,21 @@ function addon.appearancePresets.RefreshForeverColors(profiles)
         if addon.dbRuntime.IsCleanType(id, "string") then
             local previousColors = presets.previousForeverColors[id]
             local colors = rawget(settings, "colors")
-            if previousColors and addon.dbRuntime.IsCleanTable(colors) then
-                -- Manual color edits mark the profile Custom. Only replace a
-                -- swatch that exactly matches a previous preset color.
+            if id == "custom" and addon.dbRuntime.IsCleanTable(colors) then
+                -- Font size and opacity changes also set Custom. Recover the
+                -- palette only when every saved swatch matches a published preset.
+                local saved, copied = addon.dbRuntime.CloneSerializable(colors)
+                if copied then
+                    for _, presetID in ipairs(presets.order) do
+                        local legacy = presets.legacyForeverPalettes[presetID]
+                        if legacy and addon.presetRuntime.ValuesEqual(saved, legacy) then
+                            settings.colors = CopyTable(presets.definitions[presetID].colors)
+                            break
+                        end
+                    end
+                end
+            elseif previousColors and addon.dbRuntime.IsCleanTable(colors) then
+                -- A named preset may still differ from its original swatches.
                 for key, variants in pairs(previousColors) do
                     local swatch = rawget(colors, key)
                     if addon.dbRuntime.IsCleanTable(swatch)

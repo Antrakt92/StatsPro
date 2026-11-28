@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.26.0 - 28-Nov-2026 — Clearer localized gear labels
+
+- Show full names for Durability and Repair in Full label mode. Use compact, distinct labels in Short mode.
+
 ## 1.25.8 - 28-Nov-2026 — HUD fitting and repair recovery
 
 - Keep the HUD and stat tooltips within small game windows. Restore the selected HUD scale when the window has room again.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.26.0 - 28-Nov-2026 — Health regeneration and brighter HUD colors
+
+- Enable **Health Regen / sec** under **Stats → Utility** to see your health regeneration per second. The HUD switches between the resting and combat rates. Older profile codes still import.
+- The Default palette uses brighter colors, with gold Stamina, green Agility, orange Attack Power, and pink Crit. Health and mana regeneration have different colors.
+- Separate colors that were too similar in several appearance presets, including Attack Power and Movement Speed, Fire Spell Power and Crit, and Defense and Dodge. Presets keep manually chosen colors when upgrading.
+- Show full Durability and Repair names in Full label mode and readable abbreviations in Short mode. Give the Health Regen setting its own row so longer translations fit.
+
 ## 1.25.6 - 28-Nov-2026 — HUD fitting and repair recovery
 
 - Keep the HUD and stat tooltips within small game windows. Restore the selected HUD scale when the window has room again.

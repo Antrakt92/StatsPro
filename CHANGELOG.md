@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.26.1 - 28-Nov-2026 — Keep Haste and Mastery visible in combat
+
+- Keep the last readable Haste and Mastery percentages when the game temporarily cannot supply or display a live value. This also keeps percentage-only rows visible through combat transitions.
+- Resume live updates as soon as the game can display the current value. Clear the saved readings when your specialization, equipment, or effective level changes.
+
 ## 1.26.0 - 28-Nov-2026 — Clearer localized gear labels
 
 - Show full names for Durability and Repair in Full label mode. Use compact, distinct labels in Short mode.

@@ -9992,10 +9992,16 @@ local function RefreshDurabilityCache()
     -- last complete aggregate and rely on PLAYER_REGEN_ENABLED instead of polling.
     local durabilityRetryPending = (cached.showDurability or cached.showRepairCost)
         and not durabilityComplete and (inCombat == false or runtime.postCombatRecovery)
+    -- The auction can close before tooltip fields become readable again.
+    local recoveringAuction = runtime.postAuctionRecovery and inCombat == false
     local repairRetryPending = repairCostPending
-        and (repairCostRetryable or (runtime.postCombatRecovery and repairCostRestricted))
+        and (repairCostRetryable or (repairCostRestricted and (recoveringAuction or runtime.postCombatRecovery)))
     runtime.ScheduleRetry("durability", durabilityRetryPending)
     runtime.ScheduleRetry("repair", repairRetryPending)
+    if runtime.postAuctionRecovery and not durabilityDirty
+            and runtime.retryStates.repair.scheduledGeneration == nil then
+        runtime.postAuctionRecovery = nil
+    end
     if runtime.postCombatRecovery and not durabilityDirty
             and runtime.retryStates.durability.scheduledGeneration == nil
             and runtime.retryStates.repair.scheduledGeneration == nil then
@@ -13129,12 +13135,14 @@ function addon.durabilityRuntime.SetAuctionOpen(isOpen)
     if runtime.auctionOpen == isOpen then return end
     local wasOpen = runtime.auctionOpen
     runtime.auctionOpen = isOpen
+    runtime.postAuctionRecovery = nil
     -- Repair can be the only row in the Gear section. Let the normal renderer
     -- update the section on the next frame without scanning in this callback.
     if cached.showRepairCost then timeSinceLastUpdate = cached.updateInterval or 0.5 end
     -- Closing the auction can leave a previously incomplete price without
     -- another inventory event. Give it one fresh, coalesced retry budget.
     if wasOpen and not isOpen and cached.showRepairCost and not cached.repairCostComplete then
+        runtime.postAuctionRecovery = true
         runtime.MarkDirty()
     end
 end
@@ -13155,6 +13163,7 @@ local EVENT_HANDLERS = {
     PLAYER_ENTERING_WORLD       = function(...)
         addon.durabilityRuntime.auctionOpen = false
         addon.durabilityRuntime.postCombatRecovery = nil
+        addon.durabilityRuntime.postAuctionRecovery = nil
         OnPlayerEnteringWorld(...)
     end,
     PLAYER_LOGOUT               = OnPlayerLogout,
@@ -13279,6 +13288,7 @@ local EVENT_HANDLERS = {
         if addon.forever.enabled then addon.forever.NoteManaCombatTransition(true) end
         cached.repairCostCombat = nil
         addon.durabilityRuntime.postCombatRecovery = nil
+        addon.durabilityRuntime.postAuctionRecovery = nil
         addon.panelEditRuntime.FinishDrags()
         addon.hudPresets.combatState = true
         addon.profileRuntime.CancelOwnedMutationPopups()

@@ -385,8 +385,10 @@ print(flavor .. " delayed combat-end gear recovery regressions passed")
 
 for _, modernInteraction in ipairs({ false, true }) do
     local cost, reads = 300, 0
+    local restrictedCost = {}
     local env, addon, test = loadStatsPro("enUS", {
         statsProDB = { showDurability = true, showRepairCost = true },
+        issecretvalue = function(value) return rawequal(value, restrictedCost) end,
         getInventoryItemDurability = function(slot)
             if slot == 1 then return 80, 100 end
         end,
@@ -441,6 +443,50 @@ for _, modernInteraction in ipairs({ false, true }) do
     env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
     assert(addon:RunUpdateStatsSafe() and repairBlock().repairStr == "—",
         "other NPC interactions do not suppress unresolved repair")
+
+    if modernInteraction then
+        env.__fireEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", auctioneer)
+    else
+        env.__fireEvent("AUCTION_HOUSE_SHOW")
+    end
+    cost = restrictedCost
+    env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    assert(addon:RunUpdateStatsSafe() and repairBlock().repairStr == "",
+        "an auction also suppresses a restricted repair reading")
+    if modernInteraction then
+        env.__fireEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", auctioneer)
+    else
+        env.__fireEvent("AUCTION_HOUSE_CLOSED")
+    end
+    assert(addon:RunUpdateStatsSafe() and test.durabilityState().repairRetryScheduled,
+        "closing an auction can precede the first clean repair reading")
+    cost = 600
+    env.__flushTimers()
+    assert(addon:RunUpdateStatsSafe() and test.durabilityState().repairCost == 600
+        and not test.durabilityState().repairRetryScheduled,
+        "a bounded repair retry recovers without another inventory event")
+
+    cost = restrictedCost
+    env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    assert(addon:RunUpdateStatsSafe() and not test.durabilityState().repairRetryScheduled,
+        "ordinary restricted inventory reads still wait for a relevant event")
+    if modernInteraction then
+        env.__fireEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", auctioneer)
+        env.__fireEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", auctioneer)
+    else
+        env.__fireEvent("AUCTION_HOUSE_SHOW")
+        env.__fireEvent("AUCTION_HOUSE_CLOSED")
+    end
+    assert(addon:RunUpdateStatsSafe() and test.durabilityState().repairRetryScheduled,
+        "a new auction close starts one new recovery budget")
+    local limit = test.durabilityState().retryLimit
+    for _ = 1, limit do
+        env.__flushTimers()
+        assert(addon:RunUpdateStatsSafe())
+    end
+    local exhausted = test.durabilityState()
+    assert(exhausted.repairRetryAttempt == limit and not exhausted.repairRetryScheduled,
+        "a repair tooltip that remains restricted after the auction exhausts its normal budget")
 end
 print(flavor .. " auction repair display regressions passed")
 

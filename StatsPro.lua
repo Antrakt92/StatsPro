@@ -12327,10 +12327,10 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
             if (group ~= "utility" or definition.key == "HealthRegen") and state == "clean" and value == 0
                 and lastClean[rowKey] ~= nil and lastClean[rowKey] ~= 0 then
                 -- A single zero between readable samples can be transitional.
-                -- Reflows and previews in the same refresh cannot confirm it.
-                local sampleNumber = addon.forever.hudSample
-                if pending[rowKey] ~= sampleNumber - 1 then
-                    pending[rowKey] = sampleNumber
+                -- Only two consecutive ticker reads can confirm it.
+                local sampleNumber = addon.forever.scheduledHUDSample
+                if not sampleNumber or pending[rowKey] ~= sampleNumber - 1 then
+                    if sampleNumber then pending[rowKey] = sampleNumber end
                     state = "unknown"
                 end
             else
@@ -13174,8 +13174,12 @@ tickerFrame:SetScript("OnUpdate", function(self, elapsed)
     end
     timeSinceLastUpdate = timeSinceLastUpdate + elapsed
     if timeSinceLastUpdate >= cached.updateInterval then
-        if addon.forever.enabled then addon.forever.hudSample = addon.forever.hudSample + 1 end
+        if addon.forever.enabled then
+            addon.forever.hudSample = addon.forever.hudSample + 1
+            addon.forever.scheduledHUDSample = addon.forever.hudSample
+        end
         addon:RunUpdateStatsSafe()
+        addon.forever.scheduledHUDSample = nil
         timeSinceLastUpdate = 0
     end
 end)

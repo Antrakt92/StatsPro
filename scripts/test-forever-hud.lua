@@ -169,6 +169,8 @@ do
     check(valueFor("utility", "Mana Regen / 5 sec"):find("5.00", 1, true), "clean casting MP5 takes priority")
     check(valueFor("offensive", "Melee Crit"):find("5.00%", 1, true), "first zero preserves crit")
     tickHUD(moveEnv, 5)
+    check(valueFor("offensive", "Melee Crit"):find("5.00%", 1, true), "manual render cannot establish the first zero")
+    tickHUD(moveEnv, 5)
     check(valueFor("offensive", "Melee Crit") == "", "confirmed clean zero follows Hide Zero")
     crit = secretCrit
     check(valueFor("offensive", "Melee Crit") == "", "protected crit preserves the last clean zero for Hide Zero")
@@ -608,6 +610,7 @@ do
     resting = 0
     check(displays("21.50"), "a single zero preserves the last healthy sample")
     tickHUD(healthEnv, 5)
+    tickHUD(healthEnv, 5)
     check(displays("0.00"), "a confirmed zero replaces last-known HP regeneration")
     settings.hideZeroTertiary = true
     healthTest.cacheSettings()
@@ -733,6 +736,8 @@ do
     expectRanged("29.00%", "101", "first zero leaves the previous value visible")
     expectRanged("29.00%", "101", "same-refresh zero cannot confirm a genuine zero")
     tickHUD(kitEnv, 5)
+    expectRanged("29.00%", "101", "first scheduled zero still retains the last value")
+    tickHUD(kitEnv, 5)
     check(not contains(kitTest.buildRenderBlocks()[2], "Ranged Haste"), "confirmed clean zero is hidden")
     haste = protectedHaste
     check(not contains(kitTest.buildRenderBlocks()[2], "Ranged Haste"), "compound same-context clean zero stays hidden")
@@ -853,6 +858,7 @@ check(not string.find(secondRestricted, "75", 1, true), "previous restricted sca
 combat, restricted = false, false
 attackPower, hitBonus, hitModifier = 15, 0, 0
 test.buildRenderBlocks()
+tickHUD(env, 5)
 tickHUD(env, 5)
 blocks = test.buildRenderBlocks()
 check(hasStat(blocks[2], "Attack Power", "16"), "fresh AP immediately replaces fallback")

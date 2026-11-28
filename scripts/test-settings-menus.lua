@@ -772,4 +772,31 @@ for _, forever in ipairs({ false, true }) do
     check(caption:GetText() == fontName and caption:GetFont() == baseline,
         'collapsed Font field renders the selected name with the same coverage')
 end
+for _, forever in ipairs({ false, true }) do
+    local env, addon, test = fixtures.loadStatsPro('ruRU', {
+        forever = forever, unitGUID = function() return 'Player-RussianGearLabels' end,
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    env.StatsProDB.account.forceLocale = 'ruRU'
+    test.cacheSettings()
+    check(test.getStyledLabelText('Durability', 'full') == 'Прочность:'
+        and test.getStyledLabelText('Repair', 'full') == 'Ремонт:', 'full Russian gear labels are readable')
+    check(test.getStyledLabelText('Durability', 'short') == 'Проч.:'
+        and test.getStyledLabelText('Repair', 'short') == 'Рем.:', 'short Russian gear labels remain distinct')
+    if forever then
+        env.StatsProDB.account.forceLocale = 'enUS'
+        test.cacheSettings()
+        addon:OpenConfigMenu()
+        env.StatsProDB.account.forceLocale = 'ruRU'
+        test.cacheSettings()
+        addon.profileRuntime.RefreshConfigControls()
+        local health = env.StatsProForeverHealthRegen
+        local caption = env.StatsProForeverHealthRegenText
+        check(caption:GetText() == 'Восстановление здоровья / сек'
+            and caption:GetWidth() >= caption:GetUnboundedStringWidth(), 'Russian HP regeneration fits in Settings')
+        check(health.points[1][3] > env.StatsProForeverMovementSpeed.points[1][3],
+            'HP regeneration has its own row above movement speed')
+        check(test.getStyledLabelText('Health Regen / sec', 'short') == 'Здор/с:', 'short HP regeneration stays explicit')
+    end
+end
 print('Settings menus: ' .. checks .. ' checks passed')

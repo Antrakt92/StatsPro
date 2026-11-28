@@ -1864,13 +1864,8 @@ local isLoaded = false
     7. HELPERS
 ============================================================ ]]
 
--- Short-form labels are a first-character derivative, not a hand-curated table:
--- GetStyledLabelText renders the "short" style as FirstUTF8Char(localized label)
--- plus a colon, so every locale inherits its short form from the full
--- LABELS_BY_LOCALE entry below (UTF-8-aware, non-ASCII initials stay intact).
--- Translation philosophy: keep the full label natural in each client language
--- (official WoW client stat terminology preferred) and the short style follows
--- automatically without per-locale abbreviations.
+-- Short labels normally use the first UTF-8 character. Forever stats and Russian
+-- gear labels have explicit abbreviations where an initial would be unclear.
 --
 -- Ships with current WoW addon locale tables:
 --   enUS (canonical source table with a few intentional display-name aliases)
@@ -2050,12 +2045,12 @@ local LABELS_BY_LOCALE = {
         Strength = "Сила",      Agility = "Ловк",       Intellect = "Инт",      Stamina = "Выно",
         ItemLevel = "УрП",
         Leech = "Вамп",         Avoidance = "Избег",    Speed = "Движ",
-        Durability = "Проч",    Repair = "Рем",
+        Durability = "Прочность", Repair = "Ремонт",
         Defensive = "Защита",
         -- ===== Settings UI =====
         -- Tabs (Defensive uses "Защита" via the existing key above):
         ["Stats"] = "Статы", ["Layout"] = "Макет", ["Appearance"] = "Внешний вид",
-        -- Section headers / split block labels (Durability reuses "Проч" — short form):
+        -- Section headers / split block labels:
         ["Character"] = "Персонаж", ["Item Level"] = "Уровень предметов",
         ["Offensive"] = "Атака", ["Tertiary"] = "Третичные",
         ["Gear"] = "Экипировка", ["Repair Cost"] = "Стоимость ремонта",
@@ -14545,15 +14540,15 @@ end
 -- pixel widths). For groups of rows that should form a vertical column of swatches, call
 -- AlignSwatchColumn(rows) post-creation — it normalizes all texts to the group's max
 -- GetStringWidth so swatches line up at the same x relative to column start.
-local function CreateCheckboxColor(parent, name, label, dbKey, colorKey, x, y, onChange)
+local function CreateCheckboxColor(parent, name, label, dbKey, colorKey, x, y, onChange, labelMaxWidth)
     local cb, text = CreateCheckbox(parent, name, label, dbKey, x, y, onChange,
-        addon.settingsDesign.tokens.geometry.checkboxColorLabelWidth)
+        labelMaxWidth or addon.settingsDesign.tokens.geometry.checkboxColorLabelWidth)
     local swatch
     if colorKey then
         -- Override the 140-bound width with actual text rendering width — swatch needs
         -- to hug the text end, not the right edge of the 140px reservation. Cap the
         -- width so verbose localized labels clip instead of pushing into the next column.
-        text.statsProMaxWidth = addon.settingsDesign.tokens.geometry.checkboxColorLabelMaxWidth
+        text.statsProMaxWidth = labelMaxWidth or addon.settingsDesign.tokens.geometry.checkboxColorLabelMaxWidth
         text:SetWidth(math.min(text:GetStringWidth(), text.statsProMaxWidth))
         swatch = CreateColorSwatch(parent, colorKey, 0, 0)
         swatch:ClearAllPoints()
@@ -15814,6 +15809,10 @@ GetStyledLabelText = function(englishKey, labelStyle)
     if style == "hidden" then
         return ""
     elseif style == "short" then
+        if cached.activeLabelsLocale == "ruRU" then
+            if englishKey == "Durability" then return "Проч.:" end
+            if englishKey == "Repair" then return "Рем.:" end
+        end
         if addon.forever.enabled and addon.forever.ShortLabel then
             local label = addon.forever.ShortLabel(englishKey, cached.activeLabelsLocale or GetLocale())
             if label then return label .. ":" end
@@ -21490,11 +21489,17 @@ function addon.settingsUI.BuildStatsTab(self, context)
                 CursorAdvance(cs, 26)
             end
             local colorColumns = { {}, {} }
+            local column = 0
             for index, definition in ipairs(rows) do
-                local column = (index - 1) % 2
+                -- The full regeneration label can exceed a half-width row in Settings.
+                local fullWidth = definition.key == "HealthRegen"
+                if fullWidth and column == 1 then
+                    CursorAdvance(cs, 26)
+                    column = 0
+                end
                 local control, swatch, text = CreateCheckboxColor(statsBody, "StatsProForever" .. definition.key,
                     definition.label, definition.showKey, definition.colorKey,
-                    cs.padX + column * CONFIG_COL_OFFSET, cs.y)
+                    cs.padX + column * CONFIG_COL_OFFSET, cs.y, nil, fullWidth and 360 or nil)
                 self.settingsDesign.AttachTooltip(control, function()
                     local detail = L("A ? means this stat is unavailable or cannot be calculated safely.")
                     if definition.key == "ManaRegenMP5" then
@@ -21505,10 +21510,18 @@ function addon.settingsUI.BuildStatsTab(self, context)
                     return self.settingsDesign.DisabledControlTooltip(control) or L(definition.label), detail
                 end)
                 subControls[#subControls + 1] = control
-                colorColumns[column + 1][#colorColumns[column + 1] + 1] = {
-                    text = text, swatch = swatch,
-                }
-                if column == 1 or index == #rows then CursorAdvance(cs, 26) end
+                local colorRow = { text = text, swatch = swatch }
+                if fullWidth then
+                    AlignSwatchColumn({ colorRow })
+                else
+                    colorColumns[column + 1][#colorColumns[column + 1] + 1] = colorRow
+                end
+                if fullWidth or column == 1 or index == #rows then
+                    CursorAdvance(cs, 26)
+                    column = 0
+                else
+                    column = 1
+                end
             end
             AlignSwatchColumn(colorColumns[1])
             AlignSwatchColumn(colorColumns[2])

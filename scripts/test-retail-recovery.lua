@@ -315,6 +315,74 @@ for _, costReadyOnWake in ipairs({ true, false }) do
 end
 print(flavor .. " late repair tooltip recovery regressions passed")
 
+for _, hideWear in ipairs({ true, false }) do
+    local combat, restricted, wear, cost = false, false, 90, 300
+    local secret = {}
+    local env, addon, test = loadStatsPro("enUS", {
+        unitClassToken = "MAGE", specIndex = 1, specID = 64,
+        statsProDB = { showDurability = true, showRepairCost = true },
+        inCombatLockdown = function() return combat end,
+        issecretvalue = function(value) return rawequal(value, secret) end,
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return restricted and hideWear and secret or wear, 100 end
+        end,
+        getTooltipInventoryItem = function() return { repairCost = restricted and secret or cost } end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(addon:RunUpdateStatsSafe() and test.durabilityState().repairCost == 300)
+    combat, restricted = true, true
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    assert(addon:RunUpdateStatsSafe())
+    local before = test.durabilityState()
+    assert(before.durabilityValue == 90 and before.repairCost == nil
+        and not before.durabilityRetryScheduled and not before.repairRetryScheduled,
+        "restricted gear does not schedule retries during ordinary combat")
+
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
+    assert(addon:RunUpdateStatsSafe() and test.durabilityState().repairRetryScheduled,
+        "the combat-end event opens a bounded recovery even before the APIs settle")
+    local generation = addon.durabilityRuntime.generation
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
+    assert(addon.durabilityRuntime.generation == generation,
+        "duplicate combat-end events do not reset an active gear budget")
+    env.__flushTimers(10)
+    assert(addon:RunUpdateStatsSafe() and test.durabilityState().repairRetryAttempt == 2,
+        "the recovery survives a second restricted sample")
+
+    combat, restricted, wear, cost = false, false, 80, 600
+    env.__flushTimers(10)
+    assert(addon:RunUpdateStatsSafe())
+    local recovered = test.durabilityState()
+    assert(recovered.durabilityValue == 80 and recovered.repairCost == 600
+        and not recovered.durabilityRetryScheduled and not recovered.repairRetryScheduled,
+        "durability and repair recover without another inventory event")
+
+    combat, restricted = true, true
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    assert(addon:RunUpdateStatsSafe())
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
+    assert(addon:RunUpdateStatsSafe() and test.durabilityState().repairRetryScheduled)
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    env.__flushTimers()
+    assert(not test.durabilityState().dirty and not addon.durabilityRuntime.postCombatRecovery,
+        "entering combat again makes the previous handoff timers inert")
+
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
+    assert(addon:RunUpdateStatsSafe() and test.durabilityState().repairRetryScheduled)
+    local budget = test.durabilityState().retryLimit
+    for _ = 1, budget + 1 do
+        env.__flushTimers()
+        assert(addon:RunUpdateStatsSafe())
+    end
+    local exhausted = test.durabilityState()
+    assert(exhausted.repairRetryAttempt == budget and not exhausted.repairRetryScheduled
+        and not exhausted.durabilityRetryScheduled and not addon.durabilityRuntime.postCombatRecovery,
+        "persistent restrictions exhaust the recovery budget and stop polling")
+end
+print(flavor .. " delayed combat-end gear recovery regressions passed")
+
 for _, modernInteraction in ipairs({ false, true }) do
     local cost, reads = 300, 0
     local env, addon, test = loadStatsPro("enUS", {
@@ -2416,8 +2484,8 @@ if not forever then
 
     combat, armor = false, nil
     assert(addon:RunUpdateStatsSafe())
-    assert(plain(test.buildRenderBlocks()[4].values[1]) == "25.0%",
-        "leaving combat does not imply that an inaccessible Armor sample is fresh")
+    assert(#test.buildRenderBlocks()[4].labels == 0,
+        "leaving combat cannot restore an inaccessible Armor sample from the previous gear")
     armor = 1100
     assert(addon:RunUpdateStatsSafe())
     local currentArmor = test.buildRenderBlocks()[4].values[1]
@@ -2458,6 +2526,59 @@ if not forever then
     assert(#resumed.labels == 1 and resumed.values[1]:find("18.0%", 1, true),
         "new context resumes direct protected Haste after a fresh Hide Zero decision")
     print("Retail provenance, context and gear comparison regressions passed")
+end
+
+if not forever then
+    local level, armor, combat, restricted = 80, 2500, false, false
+    local env, addon, test = loadStatsPro("enUS", {
+        unitClassToken = "MAGE", specIndex = 1, specID = 64,
+        statsProDB = {
+            showOffensive = true, showVersatility = true, showCrit = false, showHaste = false, showMastery = false,
+            showRating = true, showPercentage = true, hideZeroOffensive = false,
+            showDefensive = true, showArmor = true, showDodge = false, showParry = false, showBlock = false,
+            showStagger = false, hideZeroDefensive = true,
+        },
+        getCombatRating = function() if not restricted then return 490 end end,
+        getCombatRatingBonus = function() return restricted and -9 or (level == 80 and 10 or 20) end,
+        getVersatilityBonus = function() return restricted and -9 or 2 end,
+        unitArmor = function() return 0, armor end,
+        unitEffectiveLevel = function() return level end,
+        paperDollFrameGetArmorReduction = function(effectiveArmor) return effectiveArmor / 100 end,
+        inCombatLockdown = function() return combat end,
+        issecretvalue = function(value) return value == -9 end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(addon:RunUpdateStatsSafe())
+    local blocks = test.buildRenderBlocks()
+    assert(plain(blocks[2].values[1]) == "12.0%" and plain(blocks[4].values[1]) == "25.0%")
+    combat, restricted = true, true
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    env.__fireEvent("PLAYER_LEVEL_CHANGED", 80, 80, false)
+    assert(addon:RunUpdateStatsSafe())
+    blocks = test.buildRenderBlocks()
+    assert(plain(blocks[2].values[1]) == "12.0%" and plain(blocks[4].values[1]) == "25.0%",
+        "an unchanged level preserves both previous percentages")
+
+    level = 81
+    env.__fireEvent("PLAYER_LEVEL_CHANGED", 80, 81, false)
+    assert(addon:RunUpdateStatsSafe())
+    blocks = test.buildRenderBlocks()
+    assert(plain(blocks[2].ratings[1]) == "490 |" and plain(blocks[2].values[1]) == "?%"
+        and #blocks[4].labels == 0, "a new level invalidates both previous percentages and preserves raw rating")
+
+    combat, restricted, armor = false, false, 3600
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
+    assert(addon:RunUpdateStatsSafe())
+    blocks = test.buildRenderBlocks()
+    assert(plain(blocks[2].values[1]) == "22.0%" and plain(blocks[4].values[1]) == "36.0%",
+        "current statistics supersede the prior level's samples")
+
+    combat, restricted = true, true
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
+    assert(addon:RunUpdateStatsSafe() and #test.buildRenderBlocks()[4].labels == 0,
+        "a gear change invalidates Armor even while a fresh reduction is inaccessible")
+    print("Retail level and equipment invalidate only their supported fallback values")
 end
 
 if not forever then

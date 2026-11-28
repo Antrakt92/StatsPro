@@ -1721,16 +1721,18 @@ function addon.durabilityRuntime.ScheduleRetry(kind, pending)
                 or state.scheduledAttempt ~= attempt then return end
         state.scheduledGeneration = nil
         state.scheduledAttempt = nil
+        local outsideCombat = addon.profileRuntime.ReadCombatState() == false
+        local canRecover = outsideCombat or runtime.postCombatRecovery
         local shouldRetry
         if kind == "durability" then
             shouldRetry = (cached.showDurability or cached.showRepairCost)
-                and cached.durabilityComplete == false and addon.profileRuntime.ReadCombatState() == false
+                and cached.durabilityComplete == false and canRecover
         else
             shouldRetry = cached.showRepairCost and cached.repairCostComplete == false
-                and addon.profileRuntime.ReadCombatState() == false
+                and canRecover
         end
         if shouldRetry then
-            if kind == "durability" and attempt == #runtime.retryDelays then
+            if kind == "durability" and outsideCombat and attempt == #runtime.retryDelays then
                 runtime.durabilityFinalRetryGeneration = generation
             end
             durabilityDirty = true
@@ -9963,6 +9965,7 @@ end
 -- timers harmless after a newer inventory/config event or retry step.
 
 local function RefreshDurabilityCache()
+    local runtime = addon.durabilityRuntime
     local inCombat = addon.profileRuntime.ReadCombatState()
     local avg, mn, durabilityComplete, cost,
         repairCostPending, repairCostRetryable, durabilityCleanEmpty, repairCostRestricted = ScanDurabilityAndCost()
@@ -9988,17 +9991,22 @@ local function RefreshDurabilityCache()
     -- a vendor, gear swap, or combat transition. Restricted combat reads keep the
     -- last complete aggregate and rely on PLAYER_REGEN_ENABLED instead of polling.
     local durabilityRetryPending = (cached.showDurability or cached.showRepairCost)
-        and not durabilityComplete and inCombat == false
-    local repairRetryPending = repairCostPending and repairCostRetryable
-    addon.durabilityRuntime.ScheduleRetry("durability", durabilityRetryPending)
-    addon.durabilityRuntime.ScheduleRetry("repair", repairRetryPending)
+        and not durabilityComplete and (inCombat == false or runtime.postCombatRecovery)
+    local repairRetryPending = repairCostPending
+        and (repairCostRetryable or (runtime.postCombatRecovery and repairCostRestricted))
+    runtime.ScheduleRetry("durability", durabilityRetryPending)
+    runtime.ScheduleRetry("repair", repairRetryPending)
+    if runtime.postCombatRecovery and not durabilityDirty
+            and runtime.retryStates.durability.scheduledGeneration == nil
+            and runtime.retryStates.repair.scheduledGeneration == nil then
+        runtime.postCombatRecovery = nil
+    end
 
     -- nil/nil is also Blizzard's transient pre-cache shape, so a single empty scan
     -- cannot erase a good value. A repeated clean-empty result after the final
     -- backoff really elapses is authoritative (for example, after the player
     -- removes every durable item). A rejected timer only permits another read.
-    local runtime = addon.durabilityRuntime
-    if durabilityCleanEmpty and durabilityRetryPending
+    if durabilityCleanEmpty and durabilityRetryPending and inCombat == false
             and runtime.durabilityFinalRetryGeneration == runtime.generation then
         cached.durabilityLastCompleteAverage = nil
         cached.durabilityLastCompleteWorst = nil
@@ -12259,16 +12267,26 @@ local function BuildItemLevelLines(labels, ratings, values, tooltipRows)
     return labels, ratings, values
 end
 
+function addon.critRuntime.InvalidateVersatilityPercentFallback()
+    cached.versTotal = nil
+    cached.cleanRowVisibility.showVersatility = nil
+end
+
+function addon.critRuntime.InvalidateArmorFallback()
+    cached.armorDR = nil
+    cached.armorDRCurrent = nil
+    cached.cleanRowVisibility.showArmor = nil
+end
+
 function addon.critRuntime.InvalidateOffensiveFallbacks()
     local runtime = addon.critRuntime
     runtime.selectedSource = nil
     runtime.selectedSpellSchool = nil
-    cached.versTotal = nil
+    runtime.InvalidateVersatilityPercentFallback()
     cached.versTotalRating = nil
     local visibility = cached.cleanRowVisibility
     visibility.showCrit = nil
     visibility.showCritRating = nil
-    visibility.showVersatility = nil
     visibility.showVersatilityRating = nil
 end
 
@@ -12292,8 +12310,7 @@ function addon.critRuntime.RefreshSpecIdentity(invalidate, confirmedSpecID)
     runtime.specIdentityDirty = false
     runtime.specRecheckDelay = nil
     if runtime.specID then
-        cached.armorDR = nil
-        cached.armorDRCurrent = nil
+        runtime.InvalidateArmorFallback()
         addon.archonTargets.InvalidateComparisonCache()
     end
     runtime.specID = specID
@@ -13137,6 +13154,7 @@ local EVENT_HANDLERS = {
     end,
     PLAYER_ENTERING_WORLD       = function(...)
         addon.durabilityRuntime.auctionOpen = false
+        addon.durabilityRuntime.postCombatRecovery = nil
         OnPlayerEnteringWorld(...)
     end,
     PLAYER_LOGOUT               = OnPlayerLogout,
@@ -13149,8 +13167,14 @@ local EVENT_HANDLERS = {
     end,
     -- Rating conversion is player-level dependent. PLAYER_LEVEL_CHANGED covers
     -- both real and effective-level transitions in current Retail FrameXML.
-    PLAYER_LEVEL_CHANGED         = function()
+    PLAYER_LEVEL_CHANGED         = function(oldLevel, newLevel)
+        if SAFE_NUM.IsCleanFiniteNumber(oldLevel) and SAFE_NUM.IsCleanFiniteNumber(newLevel)
+            and oldLevel == newLevel then return end
         addon.archonTargets.InvalidateComparisonCache()
+        if not addon.forever.enabled then
+            addon.critRuntime.InvalidateVersatilityPercentFallback()
+            addon.critRuntime.InvalidateArmorFallback()
+        end
     end,
     -- UnitFullName may be unavailable during the initial cache warmup; retry the
     -- existing same-context metadata path when Blizzard reports the player name ready.
@@ -13169,6 +13193,7 @@ local EVENT_HANDLERS = {
             local tooltip = addon.archonTargets.tooltip
             if tooltip then tooltip:Hide() end
             addon.critRuntime.InvalidateOffensiveFallbacks()
+            addon.critRuntime.InvalidateArmorFallback()
         end
         addon.durabilityRuntime.MarkDirty()
         addon.itemLevelRuntime.MarkDirty()
@@ -13220,6 +13245,15 @@ local EVENT_HANDLERS = {
         SAFE_NUM.ReopenScaledFormatterRetries()
         SAFE_NUM.RecoverSecretFormatter()
         cached.repairCostCombat = nil
+        local gear = addon.durabilityRuntime
+        if not gear.postCombatRecovery and (cached.showDurability or cached.showRepairCost)
+                and (durabilityDirty or (cached.showDurability and not cached.durabilityComplete)
+                    or (cached.showRepairCost and not cached.repairCostComplete)) then
+            -- The event can precede the first readable gear sample. Let the
+            -- normal retry budget span that handoff until the snapshot settles.
+            gear.postCombatRecovery = true
+            gear.MarkDirty()
+        end
         addon.hudPresets.combatState = false
         addon.profileRuntime.ResumeCorruptRollbackApply()
         local wasLoaded = isLoaded
@@ -13231,10 +13265,6 @@ local EVENT_HANDLERS = {
         end
         -- The event is authoritative even if InCombatLockdown() lags by one frame.
         addon.panelEditRuntime.Refresh(false)
-        if (cached.showDurability and cached.durabilityComplete == false)
-            or (cached.showRepairCost and cached.repairCostComplete == false) then
-            addon.durabilityRuntime.MarkDirty()
-        end
         if cached.showItemLevel and cached.itemLevelComplete == false then
             addon.itemLevelRuntime.MarkDirty()
         end
@@ -13248,6 +13278,7 @@ local EVENT_HANDLERS = {
     PLAYER_REGEN_DISABLED       = function()
         if addon.forever.enabled then addon.forever.NoteManaCombatTransition(true) end
         cached.repairCostCombat = nil
+        addon.durabilityRuntime.postCombatRecovery = nil
         addon.panelEditRuntime.FinishDrags()
         addon.hudPresets.combatState = true
         addon.profileRuntime.CancelOwnedMutationPopups()

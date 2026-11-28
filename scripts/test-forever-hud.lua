@@ -1436,6 +1436,21 @@ do
         check(paletteTest.appearancePresets.applyPreview(), "Forever palette applies " .. id)
         local applied = paletteTest.profileState().settings
         check(paletteTest.appearancePresets.currentID() == id, "Forever palette is recognized " .. id)
+        if id == "default" then
+            local expected = {
+                foreverStrength = "ff625c", foreverAgility = "65ff6a", stamina = "ffe05a",
+                foreverIntellect = "53c5ff", foreverSpirit = "d095ff", crit = "ff4d94",
+                foreverAttackPower = "ff973f", foreverHealing = "42f5b3", foreverRegen = "729bff",
+            }
+            for key, hex in pairs(expected) do
+                local c = applied.colors[key]
+                check(string.format("%02x%02x%02x", math.floor(c.r * 255 + .5),
+                    math.floor(c.g * 255 + .5), math.floor(c.b * 255 + .5)) == hex,
+                    "bright Default swatch matches " .. key)
+            end
+            check(applied.matchValueColorToStat and applied.textOutlineStyle == "outline",
+                "Default uses matching bright numbers and an outline")
+        end
         local stamina, agility = applied.colors.stamina, applied.colors.foreverAgility
         if id ~= "monochrome" then
             check(stamina.r > stamina.g and stamina.g > stamina.b and agility.g > agility.r,
@@ -1487,7 +1502,7 @@ do
     paletteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
     check(not tooltip:IsShown(), "Forever hover closes when the pointer leaves")
 end
-for _, shape in ipairs({ "default", "custom", "manually changed" }) do
+for _, shape in ipairs({ "old default", "previous default", "custom", "manually changed" }) do
     local function load(saved)
         return fixtures.loadStatsPro("enUS", {
             forever = true, statsProDB = saved, unitGUID = function() return "Player-ForeverStaminaColor" end,
@@ -1501,14 +1516,19 @@ for _, shape in ipairs({ "default", "custom", "manually changed" }) do
     original.colors.stamina = { r = red, g = 1, b = .5 }
     local regenRed = shape == "manually changed" and .25 or .35
     original.colors.foreverRegen = { r = regenRed, g = .9, b = .85 }
+    if shape == "previous default" then
+        original.colors.stamina = { r = 1, g = .74, b = .36 }
+        original.colors.foreverRegen = { r = .40, g = .64, b = 1 }
+    end
     local reloadEnv, _, reloaded = load(currentEnv.StatsProDB)
     reloadEnv.__fireEvent("PLAYER_ENTERING_WORLD")
     local upgraded = reloaded.profileState().settings.colors.stamina
-    check(upgraded.r == (shape == "default" and 1 or red), "reload respects the " .. shape .. " Stamina swatch")
+    local useBright = shape == "old default" or shape == "previous default"
+    check(upgraded.r == (useBright and 1 or red), "reload respects the " .. shape .. " Stamina swatch")
     local regen = reloaded.profileState().settings.colors.foreverRegen
-    check(regen.r == (shape == "default" and .40 or regenRed), "reload respects the " .. shape .. " mana swatch")
-    if shape == "default" then
-        check(upgraded.g == .74 and upgraded.b == .36 and reloaded.appearancePresets.currentID() == "default",
+    check(regen.r == (useBright and 114/255 or regenRed), "reload respects the " .. shape .. " mana swatch")
+    if useBright then
+        check(upgraded.g == 224/255 and upgraded.b == 90/255 and reloaded.appearancePresets.currentID() == "default",
             "the upgraded swatch still matches the Default preset")
     end
 end

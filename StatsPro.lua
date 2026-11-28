@@ -802,12 +802,12 @@ if addon.forever.enabled then
         ["high-contrast"] = { r = 1, g = .78, b = .22 },
     }
     local previousColors = {
-        default = { stamina = { r = .5, g = 1, b = .5 } },
-        classic = { stamina = { r = .5, g = 1, b = .5 } },
+        default = { stamina = { { r = .5, g = 1, b = .5 } } },
+        classic = { stamina = { { r = .5, g = 1, b = .5 } } },
     }
     addon.appearancePresets.previousForeverColors = previousColors
     for id, color in pairs(staminaColors) do
-        previousColors[id] = { stamina = definitions[id].colors.stamina }
+        previousColors[id] = { stamina = { definitions[id].colors.stamina } }
         definitions[id].colors.stamina = color
     end
     -- Extend each theme from its own colors so missing client-specific rows do
@@ -865,13 +865,32 @@ if addon.forever.enabled then
     for id, palette in pairs(overrides) do
         local colors = definitions[id].colors
         for key, color in pairs(palette) do
-            previousColors[id][key] = colors[key]
+            previousColors[id][key] = { colors[key] }
             colors[key] = CopyTable(color)
             if id == "default" then defaults.colors[key] = CopyTable(color) end
         end
-        previousColors[id].foreverResistanceFire = colors.foreverResistanceFire
+        previousColors[id].foreverResistanceFire = { colors.foreverResistanceFire }
         colors.foreverResistanceFire = CopyTable(colors.foreverFire)
         if id == "default" then defaults.colors.foreverResistanceFire = CopyTable(colors.foreverFire) end
+    end
+    local brightDefault = {
+        foreverStrength = { r = 1, g = 98/255, b = 92/255 }, -- #FF625C
+        foreverAgility = { r = 101/255, g = 1, b = 106/255 }, -- #65FF6A
+        stamina = { r = 1, g = 224/255, b = 90/255 }, -- #FFE05A
+        foreverIntellect = { r = 83/255, g = 197/255, b = 1 }, -- #53C5FF
+        foreverSpirit = { r = 208/255, g = 149/255, b = 1 }, -- #D095FF
+        crit = { r = 1, g = 77/255, b = 148/255 }, -- #FF4D94
+        foreverAttackPower = { r = 1, g = 151/255, b = 63/255 }, -- #FF973F
+        foreverFire = { r = 1, g = 112/255, b = 56/255 }, -- #FF7038
+        foreverHealing = { r = 66/255, g = 245/255, b = 179/255 }, -- #42F5B3
+        foreverRegen = { r = 114/255, g = 155/255, b = 1 }, -- #729BFF
+    }
+    for key, color in pairs(brightDefault) do
+        local previous = previousColors.default[key] or {}
+        previous[#previous + 1] = definitions.default.colors[key]
+        previousColors.default[key] = previous
+        definitions.default.colors[key] = CopyTable(color)
+        defaults.colors[key] = CopyTable(color)
     end
 end
 
@@ -16084,15 +16103,20 @@ function addon.appearancePresets.RefreshForeverColors(profiles)
             local previousColors = presets.previousForeverColors[id]
             local colors = rawget(settings, "colors")
             if previousColors and addon.dbRuntime.IsCleanTable(colors) then
-                -- Manual color edits mark the profile Custom. Also check the old
-                -- swatch exactly so a separately edited palette keeps its color.
-                for key, previous in pairs(previousColors) do
+                -- Manual color edits mark the profile Custom. Only replace a
+                -- swatch that exactly matches a previous preset color.
+                for key, variants in pairs(previousColors) do
                     local swatch = rawget(colors, key)
                     if addon.dbRuntime.IsCleanTable(swatch)
-                        and SAFE_NUM.IsCleanFiniteNumber(swatch.r) and swatch.r == previous.r
-                        and SAFE_NUM.IsCleanFiniteNumber(swatch.g) and swatch.g == previous.g
-                        and SAFE_NUM.IsCleanFiniteNumber(swatch.b) and swatch.b == previous.b then
-                        colors[key] = CopyTable(presets.definitions[id].colors[key])
+                        and SAFE_NUM.IsCleanFiniteNumber(swatch.r)
+                        and SAFE_NUM.IsCleanFiniteNumber(swatch.g)
+                        and SAFE_NUM.IsCleanFiniteNumber(swatch.b) then
+                        for _, previous in ipairs(variants) do
+                            if swatch.r == previous.r and swatch.g == previous.g and swatch.b == previous.b then
+                                colors[key] = CopyTable(presets.definitions[id].colors[key])
+                                break
+                            end
+                        end
                     end
                 end
             end

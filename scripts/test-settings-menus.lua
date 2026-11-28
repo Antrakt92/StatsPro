@@ -772,28 +772,45 @@ for _, forever in ipairs({ false, true }) do
     check(caption:GetText() == fontName and caption:GetFont() == baseline,
         'collapsed Font field renders the selected name with the same coverage')
 end
+local gearLabels = {
+    enUS = { 'Durability', 'Repair', 'D', 'R' },
+    ruRU = { 'Прочность', 'Ремонт', 'Проч.', 'Рем.' },
+    deDE = { 'Haltbarkeit', 'Reparatur', 'Haltb.', 'Repar.' },
+    frFR = { 'Durabilité', 'Réparation', 'Durab.', 'Rép.' },
+    esES = { 'Durabilidad', 'Reparación', 'Durab.', 'Rep.' },
+    esMX = { 'Durabilidad', 'Reparación', 'Durab.', 'Rep.' },
+    itIT = { 'Durata', 'Riparazione', 'Dur.', 'Rip.' },
+    ptBR = { 'Durabilidade', 'Reparo', 'Durab.', 'Rep.' },
+    koKR = { '내구도', '수리', '내구', '수리' },
+    zhCN = { '耐久', '修理', '耐久', '修理' },
+    zhTW = { '耐久', '修理', '耐久', '修理' },
+}
 for _, forever in ipairs({ false, true }) do
     local env, addon, test = fixtures.loadStatsPro('ruRU', {
         forever = forever, unitGUID = function() return 'Player-RussianGearLabels' end,
     })
     env.__fireEvent('PLAYER_ENTERING_WORLD')
-    env.StatsProDB.account.forceLocale = 'ruRU'
+    env.StatsProDB.account.forceLocale = 'enUS'
     test.cacheSettings()
-    check(test.getStyledLabelText('Durability', 'full') == 'Прочность:'
-        and test.getStyledLabelText('Repair', 'full') == 'Ремонт:', 'full Russian gear labels are readable')
-    check(test.getStyledLabelText('Durability', 'short') == 'Проч.:'
-        and test.getStyledLabelText('Repair', 'short') == 'Рем.:', 'short Russian gear labels remain distinct')
-    if forever then
-        env.StatsProDB.account.forceLocale = 'enUS'
+    if forever then addon:OpenConfigMenu() end
+    for locale, labels in pairs(gearLabels) do
+        env.StatsProDB.account.forceLocale = locale
         test.cacheSettings()
-        addon:OpenConfigMenu()
+        check(test.getStyledLabelText('Durability', 'full') == labels[1] .. ':'
+            and test.getStyledLabelText('Repair', 'full') == labels[2] .. ':', locale .. ' full gear labels')
+        check(test.getStyledLabelText('Durability', 'short') == labels[3] .. ':'
+            and test.getStyledLabelText('Repair', 'short') == labels[4] .. ':', locale .. ' short gear labels')
+        if forever then
+            addon.profileRuntime.RefreshConfigControls()
+            local caption = env.StatsProForeverHealthRegenText
+            check(caption:GetText() == addon.forever.Translate('Health Regen / sec', locale)
+                and caption:GetWidth() >= caption:GetUnboundedStringWidth(), locale .. ' HP regeneration fits in Settings')
+        end
+    end
+    if forever then
         env.StatsProDB.account.forceLocale = 'ruRU'
         test.cacheSettings()
-        addon.profileRuntime.RefreshConfigControls()
         local health = env.StatsProForeverHealthRegen
-        local caption = env.StatsProForeverHealthRegenText
-        check(caption:GetText() == 'Восстановление здоровья / сек'
-            and caption:GetWidth() >= caption:GetUnboundedStringWidth(), 'Russian HP regeneration fits in Settings')
         check(health.points[1][3] > env.StatsProForeverMovementSpeed.points[1][3],
             'HP regeneration has its own row above movement speed')
         check(test.getStyledLabelText('Health Regen / sec', 'short') == 'Здор/с:', 'short HP regeneration stays explicit')

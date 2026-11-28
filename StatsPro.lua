@@ -1864,7 +1864,7 @@ local isLoaded = false
     7. HELPERS
 ============================================================ ]]
 
--- Short labels normally use the first UTF-8 character. Forever stats and Russian
+-- Short labels normally use the first UTF-8 character. Forever stats and localized
 -- gear labels have explicit abbreviations where an initial would be unclear.
 --
 -- Ships with current WoW addon locale tables:
@@ -2177,8 +2177,7 @@ local LABELS_BY_LOCALE = {
 
     -- deDE: German. Haste="Tempo" matches the WoW German client term; Movement="Beweg"
     -- keeps the Haste/Movement split clear. Vers="Viels" evokes Vielseitigkeit
-    -- without colliding with the everyday word "viel" (many/much). Durability="Haltb"
-    -- avoids collision with the everyday word "Halt" (stop). Strength="Stär" preserves
+    -- without colliding with the everyday word "viel" (many/much). Strength="Stär" preserves
     -- the umlaut character of Stärke at 4 chars (single char "Stä" reads truncated).
     deDE = {
         Crit = "Krit",          Haste = "Tempo",        Mastery = "Meist",      Vers = "Viels",
@@ -2186,7 +2185,7 @@ local LABELS_BY_LOCALE = {
         Strength = "Stär",      Agility = "Bew",        Intellect = "Int",      Stamina = "Aus",
         ItemLevel = "GS",
         Leech = "Saug",         Avoidance = "Verm",     Speed = "Beweg",
-        Durability = "Haltb",   Repair = "Repar",
+        Durability = "Haltbarkeit", Repair = "Reparatur",
         Defensive = "Defensiv",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         -- Movement checkbox uses the long form to disambiguate from Haste="Tempo".
@@ -2309,8 +2308,7 @@ local LABELS_BY_LOCALE = {
     },
 
     -- frFR: French. Hâte (4 chars, accented form) is WoW's official Haste term; Dépl
-    -- (déplacement) distinguishes Movement. Strength="Forc" and Durability="Dura" use 4-char forms so
-    -- they don't collide with the everyday words "Fort" / "Dur". Esqu (Esquive) at 4
+    -- (déplacement) distinguishes Movement. Strength="Forc" avoids "Fort". Esqu (Esquive) at 4
     -- chars reads more clearly than the truncated 3-char "Esq".
     frFR = {
         Crit = "Crit",          Haste = "Hâte",         Mastery = "Maît",       Vers = "Polyv",
@@ -2318,7 +2316,7 @@ local LABELS_BY_LOCALE = {
         Strength = "Forc",      Agility = "Agil",       Intellect = "Int",      Stamina = "End",
         ItemLevel = "NivObj",
         Leech = "Vamp",         Avoidance = "Évit",     Speed = "Dépl",
-        Durability = "Dura",    Repair = "Rép",
+        Durability = "Durabilité", Repair = "Réparation",
         Defensive = "Défense",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Stats", ["Layout"] = "Disposition", ["Appearance"] = "Apparence",
@@ -2450,7 +2448,7 @@ local LABELS_BY_LOCALE = {
         Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",      Stamina = "Aguante",
         ItemLevel = "NvObj",
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Mov",
-        Durability = "Durab",   Repair = "Rep",
+        Durability = "Durabilidad", Repair = "Reparación",
         Defensive = "Defensa",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Atributos", ["Layout"] = "Diseño", ["Appearance"] = "Apariencia",
@@ -2579,7 +2577,7 @@ local LABELS_BY_LOCALE = {
         Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",      Stamina = "Aguante",
         ItemLevel = "NvObj",
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Mov",
-        Durability = "Durab",   Repair = "Rep",
+        Durability = "Durabilidad", Repair = "Reparación",
         Defensive = "Defensa",
         -- ===== Settings UI (best-effort draft — mirrors esES with regional swaps:
         --   "ajustes" → "configuración" (esMX preferred); "haz clic" → "da clic".
@@ -2711,7 +2709,7 @@ local LABELS_BY_LOCALE = {
         Strength = "Forz",      Agility = "Agil",       Intellect = "Int",      Stamina = "Cost",
         ItemLevel = "LivOg",
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Mov",
-        Durability = "Durab",   Repair = "Ripa",
+        Durability = "Durata", Repair = "Riparazione",
         Defensive = "Difesa",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Stat", ["Layout"] = "Layout", ["Appearance"] = "Aspetto",
@@ -2841,7 +2839,7 @@ local LABELS_BY_LOCALE = {
         Strength = "Forç",      Agility = "Agil",       Intellect = "Int",      Stamina = "Vig",
         ItemLevel = "NvItem",
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Mov",
-        Durability = "Durab",   Repair = "Rep",
+        Durability = "Durabilidade", Repair = "Reparo",
         Defensive = "Defesa",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Atributos", ["Layout"] = "Layout", ["Appearance"] = "Aparência",
@@ -2978,7 +2976,7 @@ local LABELS_BY_LOCALE = {
         Strength = "힘",        Agility = "민첩",       Intellect = "지능",      Stamina = "체력",
         ItemLevel = "템렙",
         Leech = "흡혈",         Avoidance = "광피",     Speed = "이동",
-        Durability = "내구",    Repair = "수리",
+        Durability = "내구도", Repair = "수리",
         Defensive = "수비",
         -- ===== Settings UI (best-effort draft — native review welcomed via Issues) =====
         ["Stats"] = "능력치", ["Layout"] = "배치", ["Appearance"] = "외형",
@@ -15801,6 +15799,19 @@ local function FirstUTF8Char(s)
     return string.sub(s, 1, charLen)
 end
 
+addon.settingsDesign.shortGearLabels = {
+    ruRU = { Durability = "Проч.", Repair = "Рем." },
+    deDE = { Durability = "Haltb.", Repair = "Repar." },
+    frFR = { Durability = "Durab.", Repair = "Rép." },
+    esES = { Durability = "Durab.", Repair = "Rep." },
+    esMX = { Durability = "Durab.", Repair = "Rep." },
+    itIT = { Durability = "Dur.", Repair = "Rip." },
+    ptBR = { Durability = "Durab.", Repair = "Rep." },
+    koKR = { Durability = "내구", Repair = "수리" },
+    zhCN = { Durability = "耐久", Repair = "修理" },
+    zhTW = { Durability = "耐久", Repair = "修理" },
+}
+
 GetStyledLabelText = function(englishKey, labelStyle)
     local base = L(englishKey)
     if not base or base == "" then return "" end
@@ -15809,10 +15820,8 @@ GetStyledLabelText = function(englishKey, labelStyle)
     if style == "hidden" then
         return ""
     elseif style == "short" then
-        if cached.activeLabelsLocale == "ruRU" then
-            if englishKey == "Durability" then return "Проч.:" end
-            if englishKey == "Repair" then return "Рем.:" end
-        end
+        local gear = addon.settingsDesign.shortGearLabels[cached.activeLabelsLocale]
+        if gear and gear[englishKey] then return gear[englishKey] .. ":" end
         if addon.forever.enabled and addon.forever.ShortLabel then
             local label = addon.forever.ShortLabel(englishKey, cached.activeLabelsLocale or GetLocale())
             if label then return label .. ":" end

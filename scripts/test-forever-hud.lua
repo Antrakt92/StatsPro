@@ -1436,6 +1436,11 @@ do
         check(paletteTest.appearancePresets.applyPreview(), "Forever palette applies " .. id)
         local applied = paletteTest.profileState().settings
         check(paletteTest.appearancePresets.currentID() == id, "Forever palette is recognized " .. id)
+        local stamina, agility = applied.colors.stamina, applied.colors.foreverAgility
+        if id ~= "monochrome" then
+            check(stamina.r > stamina.g and stamina.g > stamina.b and agility.g > agility.r,
+                id .. " distinguishes amber Stamina from green Agility")
+        end
         local blocks = paletteTest.buildRenderBlocks()
         for key in pairs(paletteAddon.forever.colorDefaults) do
             local color = applied.colors[key]
@@ -1471,6 +1476,27 @@ do
     check(not tooltip:IsShown(), "a Forever row without confirmed details has no tooltip")
     paletteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
     check(not tooltip:IsShown(), "Forever hover closes when the pointer leaves")
+end
+for _, shape in ipairs({ "default", "custom", "manually changed" }) do
+    local function load(saved)
+        return fixtures.loadStatsPro("enUS", {
+            forever = true, statsProDB = saved, unitGUID = function() return "Player-ForeverStaminaColor" end,
+        })
+    end
+    local currentEnv, _, current = load()
+    currentEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local original = current.profileState().settings
+    original.appearancePresetID = shape == "custom" and "custom" or "default"
+    local red = shape == "manually changed" and .15 or .5
+    original.colors.stamina = { r = red, g = 1, b = .5 }
+    local reloadEnv, _, reloaded = load(currentEnv.StatsProDB)
+    reloadEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local upgraded = reloaded.profileState().settings.colors.stamina
+    check(upgraded.r == (shape == "default" and 1 or red), "reload respects the " .. shape .. " Stamina swatch")
+    if shape == "default" then
+        check(upgraded.g == .74 and upgraded.b == .36 and reloaded.appearancePresets.currentID() == "default",
+            "the upgraded swatch still matches the Default preset")
+    end
 end
 do
     local combatNow = false

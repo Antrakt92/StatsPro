@@ -591,6 +591,7 @@ if addon.forever.enabled then
     for key, color in pairs(addon.forever.colorDefaults or {}) do
         defaults.colors[key] = CopyTable(color)
     end
+    defaults.colors.stamina = { r = 1, g = .74, b = .36 }
 end
 
 --[[ ============================================================
@@ -794,6 +795,19 @@ for key in pairs(addon.appearancePresets.allowlist) do
 end
 
 if addon.forever.enabled then
+    local definitions = addon.appearancePresets.definitions
+    local staminaColors = {
+        ["clean-dark"] = { r = .95, g = .73, b = .43 },
+        midnight = { r = .98, g = .74, b = .40 },
+        ["high-contrast"] = { r = 1, g = .78, b = .22 },
+    }
+    addon.appearancePresets.previousForeverStamina = {
+        default = { r = .5, g = 1, b = .5 }, classic = { r = .5, g = 1, b = .5 },
+    }
+    for id, color in pairs(staminaColors) do
+        addon.appearancePresets.previousForeverStamina[id] = definitions[id].colors.stamina
+        definitions[id].colors.stamina = color
+    end
     -- Extend each theme from its own colors so missing client-specific rows do
     -- not fall back to the colorful default palette during a themed preview.
     local themeSources = {
@@ -807,7 +821,7 @@ if addon.forever.enabled then
         foreverNature = "mastery", foreverFrost = "haste",
         foreverShadow = "leech", foreverArcane = "versatility",
     }
-    for _, definition in pairs(addon.appearancePresets.definitions) do
+    for _, definition in pairs(definitions) do
         for key in pairs(addon.forever.colorDefaults) do
             if not definition.colors[key] then
                 local school = key:match("^foreverResistance(.+)$")
@@ -13162,7 +13176,9 @@ local function OnPlayerEnteringWorld()
         if not addon.profileRuntime.bootstrapStarted then
             addon.forever.RefreshClassDefaults(true)
             addon.legacyImport.ImportFreshIfAvailable()
-            MigrateDB()
+            if MigrateDB() and addon.forever.enabled then
+                addon.appearancePresets.RefreshForeverStamina(EnsureStatsProDBTable().profiles)
+            end
             addon.dbRuntime.Refresh()
             addon.profileRuntime.bootstrapStarted = true
         end
@@ -16008,6 +16024,29 @@ function addon.presetRuntime.ResolveValue(key, persisted)
 end
 
 addon.appearancePresets.markerKey = "appearancePresetID"
+function addon.appearancePresets.RefreshForeverStamina(profiles)
+    local presets = addon.appearancePresets
+    for _, profile in pairs(profiles) do
+        local settings = profile.settings
+        local id = rawget(settings, presets.markerKey)
+        if addon.dbRuntime.IsCleanType(id, "string") then
+            local previous = presets.previousForeverStamina[id]
+            local colors = rawget(settings, "colors")
+            if previous and addon.dbRuntime.IsCleanTable(colors) then
+                local stamina = rawget(colors, "stamina")
+                -- Manual color edits mark the profile Custom. Also check the old
+                -- swatch exactly so a separately edited palette keeps its color.
+                if addon.dbRuntime.IsCleanTable(stamina)
+                    and SAFE_NUM.IsCleanFiniteNumber(stamina.r) and stamina.r == previous.r
+                    and SAFE_NUM.IsCleanFiniteNumber(stamina.g) and stamina.g == previous.g
+                    and SAFE_NUM.IsCleanFiniteNumber(stamina.b) and stamina.b == previous.b then
+                    colors.stamina = CopyTable(presets.definitions[id].colors.stamina)
+                end
+            end
+        end
+    end
+end
+
 function addon.appearancePresets.BuildCandidate(definition)
     local candidate = addon.presetRuntime.Clone(definition)
     if candidate then candidate.label = nil end

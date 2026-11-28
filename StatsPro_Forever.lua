@@ -537,7 +537,9 @@ RegenRow("CastingManaRegen", "Casting Mana Regen / sec", function(sample) return
 RegenRow("ManaRegenMP5", "Mana Regen / 5 sec", ReadAdaptiveManaRegenMP5, 5, "Mana Regen / sec")
 RegenRow("CastingManaRegenMP5", "Casting Mana Regen / 5 sec",
     function(sample) return ReadManaRegenMP5(2, sample) end, 5, "Casting Mana Regen / sec")
-RegenRow("HealthRegen", "Health Regen / sec", ReadHealthRegen, 1).showDashWhenUnavailable = true
+local healthRegen = RegenRow("HealthRegen", "Health Regen / sec", ReadHealthRegen, 1)
+healthRegen.colorKey = "foreverHealing"
+healthRegen.showDashWhenUnavailable = true
 Row("utility", "MovementSpeed", "Movement Speed", MovementSpeed, "movement", "speed")
 
 F.defaults.showMainStat = false

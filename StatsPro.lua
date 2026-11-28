@@ -801,11 +801,13 @@ if addon.forever.enabled then
         midnight = { r = .98, g = .74, b = .40 },
         ["high-contrast"] = { r = 1, g = .78, b = .22 },
     }
-    addon.appearancePresets.previousForeverStamina = {
-        default = { r = .5, g = 1, b = .5 }, classic = { r = .5, g = 1, b = .5 },
+    local previousColors = {
+        default = { stamina = { r = .5, g = 1, b = .5 } },
+        classic = { stamina = { r = .5, g = 1, b = .5 } },
     }
+    addon.appearancePresets.previousForeverColors = previousColors
     for id, color in pairs(staminaColors) do
-        addon.appearancePresets.previousForeverStamina[id] = definitions[id].colors.stamina
+        previousColors[id] = { stamina = definitions[id].colors.stamina }
         definitions[id].colors.stamina = color
     end
     -- Extend each theme from its own colors so missing client-specific rows do
@@ -829,6 +831,47 @@ if addon.forever.enabled then
                 definition.colors[key] = CopyTable(definition.colors[source or "mainStat"])
             end
         end
+    end
+    local standard = {
+        foreverRegen = { r = .40, g = .64, b = 1 },
+        foreverAttackPower = { r = .97, g = .76, b = .56 },
+        foreverFire = { r = 1, g = .58, b = .20 },
+        foreverDefense = { r = .77, g = .81, b = .88 },
+    }
+    local overrides = {
+        default = standard, classic = standard,
+        ["clean-dark"] = {
+            foreverStrength = { r = .97, g = .48, b = .47 },
+            foreverRegen = { r = .44, g = .66, b = .98 },
+            foreverAttackPower = { r = .95, g = .77, b = .63 },
+            foreverFire = { r = 1, g = .65, b = .24 },
+            foreverDefense = { r = .77, g = .81, b = .88 },
+        },
+        midnight = {
+            foreverStrength = { r = .99, g = .48, b = .54 },
+            foreverRegen = { r = .43, g = .62, b = 1 },
+            foreverAttackPower = { r = .98, g = .70, b = .57 },
+            foreverFire = { r = 1, g = .53, b = .26 },
+            foreverDefense = { r = .76, g = .81, b = .90 },
+        },
+        ["high-contrast"] = {
+            foreverStrength = { r = 1, g = .38, b = .42 },
+            foreverRegen = { r = .47, g = .66, b = 1 },
+            foreverAttackPower = { r = 1, g = .84, b = .67 },
+            foreverFire = { r = 1, g = .51, b = .16 },
+            foreverDefense = { r = .78, g = .84, b = 1 },
+        },
+    }
+    for id, palette in pairs(overrides) do
+        local colors = definitions[id].colors
+        for key, color in pairs(palette) do
+            previousColors[id][key] = colors[key]
+            colors[key] = CopyTable(color)
+            if id == "default" then defaults.colors[key] = CopyTable(color) end
+        end
+        previousColors[id].foreverResistanceFire = colors.foreverResistanceFire
+        colors.foreverResistanceFire = CopyTable(colors.foreverFire)
+        if id == "default" then defaults.colors.foreverResistanceFire = CopyTable(colors.foreverFire) end
     end
 end
 
@@ -13177,7 +13220,7 @@ local function OnPlayerEnteringWorld()
             addon.forever.RefreshClassDefaults(true)
             addon.legacyImport.ImportFreshIfAvailable()
             if MigrateDB() and addon.forever.enabled then
-                addon.appearancePresets.RefreshForeverStamina(EnsureStatsProDBTable().profiles)
+                addon.appearancePresets.RefreshForeverColors(EnsureStatsProDBTable().profiles)
             end
             addon.dbRuntime.Refresh()
             addon.profileRuntime.bootstrapStarted = true
@@ -16024,23 +16067,25 @@ function addon.presetRuntime.ResolveValue(key, persisted)
 end
 
 addon.appearancePresets.markerKey = "appearancePresetID"
-function addon.appearancePresets.RefreshForeverStamina(profiles)
+function addon.appearancePresets.RefreshForeverColors(profiles)
     local presets = addon.appearancePresets
     for _, profile in pairs(profiles) do
         local settings = profile.settings
         local id = rawget(settings, presets.markerKey)
         if addon.dbRuntime.IsCleanType(id, "string") then
-            local previous = presets.previousForeverStamina[id]
+            local previousColors = presets.previousForeverColors[id]
             local colors = rawget(settings, "colors")
-            if previous and addon.dbRuntime.IsCleanTable(colors) then
-                local stamina = rawget(colors, "stamina")
+            if previousColors and addon.dbRuntime.IsCleanTable(colors) then
                 -- Manual color edits mark the profile Custom. Also check the old
                 -- swatch exactly so a separately edited palette keeps its color.
-                if addon.dbRuntime.IsCleanTable(stamina)
-                    and SAFE_NUM.IsCleanFiniteNumber(stamina.r) and stamina.r == previous.r
-                    and SAFE_NUM.IsCleanFiniteNumber(stamina.g) and stamina.g == previous.g
-                    and SAFE_NUM.IsCleanFiniteNumber(stamina.b) and stamina.b == previous.b then
-                    colors.stamina = CopyTable(presets.definitions[id].colors.stamina)
+                for key, previous in pairs(previousColors) do
+                    local swatch = rawget(colors, key)
+                    if addon.dbRuntime.IsCleanTable(swatch)
+                        and SAFE_NUM.IsCleanFiniteNumber(swatch.r) and swatch.r == previous.r
+                        and SAFE_NUM.IsCleanFiniteNumber(swatch.g) and swatch.g == previous.g
+                        and SAFE_NUM.IsCleanFiniteNumber(swatch.b) and swatch.b == previous.b then
+                        colors[key] = CopyTable(presets.definitions[id].colors[key])
+                    end
                 end
             end
         end

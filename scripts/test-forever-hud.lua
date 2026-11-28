@@ -1440,6 +1440,16 @@ do
         if id ~= "monochrome" then
             check(stamina.r > stamina.g and stamina.g > stamina.b and agility.g > agility.r,
                 id .. " distinguishes amber Stamina from green Agility")
+            local colors = applied.colors
+            check(colors.foreverRegen.b > colors.foreverRegen.g and colors.foreverHealing.g > colors.foreverHealing.b,
+                id .. " distinguishes blue mana and green health")
+            for _, pair in ipairs({ { "foreverAttackPower", "speed" }, { "foreverFire", "crit" },
+                    { "foreverDefense", "dodge" }, { "foreverResistanceFire", "parry" },
+                    { "foreverStrength", "stamina" }, { "foreverStrength", "foreverIntellect" } }) do
+                local first, second = colors[pair[1]], colors[pair[2]]
+                check(math.max(math.abs(first.r - second.r), math.abs(first.g - second.g),
+                    math.abs(first.b - second.b)) >= .15, id .. " separates " .. pair[1] .. " and " .. pair[2])
+            end
         end
         local blocks = paletteTest.buildRenderBlocks()
         for key in pairs(paletteAddon.forever.colorDefaults) do
@@ -1489,10 +1499,14 @@ for _, shape in ipairs({ "default", "custom", "manually changed" }) do
     original.appearancePresetID = shape == "custom" and "custom" or "default"
     local red = shape == "manually changed" and .15 or .5
     original.colors.stamina = { r = red, g = 1, b = .5 }
+    local regenRed = shape == "manually changed" and .25 or .35
+    original.colors.foreverRegen = { r = regenRed, g = .9, b = .85 }
     local reloadEnv, _, reloaded = load(currentEnv.StatsProDB)
     reloadEnv.__fireEvent("PLAYER_ENTERING_WORLD")
     local upgraded = reloaded.profileState().settings.colors.stamina
     check(upgraded.r == (shape == "default" and 1 or red), "reload respects the " .. shape .. " Stamina swatch")
+    local regen = reloaded.profileState().settings.colors.foreverRegen
+    check(regen.r == (shape == "default" and .40 or regenRed), "reload respects the " .. shape .. " mana swatch")
     if shape == "default" then
         check(upgraded.g == .74 and upgraded.b == .36 and reloaded.appearancePresets.currentID() == "default",
             "the upgraded swatch still matches the Default preset")

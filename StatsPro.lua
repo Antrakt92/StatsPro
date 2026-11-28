@@ -1666,6 +1666,7 @@ cached = {
     versTotal = nil,
     versTotalRating = nil,
     hasReadVersatilityPercent = false,
+    directOffensivePercent = {},
     armorDR = nil,
     armorDRCurrent = nil,
     itemLevelOverall = nil,
@@ -12143,7 +12144,7 @@ end
 -- Format a stat value (rating + percentage variants honoring user toggles).
 -- Returns TWO strings (ratingStr, valueStr) — see IsDualColMode for routing rules.
 local function FmtRatingPct(rating, pct, statColor, forceUnknownPercent,
-        formattedValue, hasFormattedValue)
+        formattedValue, hasFormattedValue, lastPercent)
     local cs = cached.colorStrings
     local rc = (cached.matchValueColorToStat and statColor) or cs.rating
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
@@ -12155,7 +12156,11 @@ local function FmtRatingPct(rating, pct, statColor, forceUnknownPercent,
     elseif forceUnknownPercent then
         pctStr = "|cff" .. pc .. "?%|r"
     else
-        pctStr = FmtColorPct(pc, pct)
+        local placeholder
+        pctStr, placeholder = FmtColorPct(pc, pct)
+        if (placeholder or type(pctStr) ~= "string") and lastPercent ~= nil then
+            pctStr = FmtColorPct(pc, lastPercent)
+        end
     end
     if IsDualColMode() then
         return ratingStr .. " |cff808080|||r", pctStr or ""
@@ -12469,6 +12474,7 @@ function addon.critRuntime.InvalidateOffensiveFallbacks()
     runtime.selectedSpellSchool = nil
     runtime.InvalidateVersatilityPercentFallback()
     cached.versTotalRating = nil
+    cached.directOffensivePercent = {}
     local visibility = cached.cleanRowVisibility
     visibility.showCrit = nil
     visibility.showCritRating = nil
@@ -12569,9 +12575,20 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             local percentIsProxy = percentState == "liveProxy"
             local visibilityKey = not specUnsettled and def.showKey or nil
             local ratingVisibilityKey = visibilityKey and visibilityKey .. "Rating"
+            local lastPercent
+            if not def.composite and visibilityKey and addon.critRuntime.specID then
+                -- Only direct, clean percentages from the confirmed spec enter
+                -- this display cache. Keep the live inputs for Archon below.
+                if currentPercent ~= nil then
+                    cached.directOffensivePercent[def.statKey] = currentPercent
+                else
+                    lastPercent = cached.directOffensivePercent[def.statKey]
+                end
+            end
             local percentVisible = shouldShowUnknown(
                     visibilityKey, forceUnknownPercent or percentIsProxy, cached.hideZeroOffensive)
                 or (not percentIsProxy and shouldShow(visibilityKey, val, cached.hideZeroOffensive))
+                or (lastPercent ~= nil and (not cached.hideZeroOffensive or lastPercent ~= 0))
             local visible = percentAffectsVisibility and percentVisible
             if cached.showRating then
                 ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(
@@ -12597,7 +12614,8 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 if sourceLabel and cached.showPercentage and cached.labelStyle == "full" then
                     label = sourceLabel
                 end
-                local rStr, vStr = FmtRatingPct(rating, val, statColor, forceUnknownPercent)
+                local rStr, vStr = FmtRatingPct(rating, val, statColor, forceUnknownPercent,
+                    nil, nil, lastPercent)
                 if targetRows then
                     targetRows[#targetRows + 1] = needTargetRating and addon.archonTargets.BuildMeta(
                         def.statKey, targetRating, def.ratingCR, currentPercent,
@@ -13368,6 +13386,7 @@ local EVENT_HANDLERS = {
         addon.archonTargets.InvalidateComparisonCache()
         if not addon.forever.enabled then
             addon.critRuntime.InvalidateVersatilityPercentFallback()
+            cached.directOffensivePercent = {}
             addon.critRuntime.InvalidateArmorFallback()
         end
     end,

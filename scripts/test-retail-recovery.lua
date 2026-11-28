@@ -2400,6 +2400,94 @@ if not forever then
 end
 
 if not forever then
+    local spec, combat = 64, false
+    local haste, mastery = 18.5, 24.8
+    local protectedHaste, protectedMastery = {}, {}
+    local hasteText, masteryText = "23.0%", "30.0%"
+    local formatterReady = true
+    local env, addon, test = loadStatsPro("enUS", {
+        unitClassToken = "MAGE", specIndex = 1,
+        getSpecializationInfo = function() return spec, "Mage", nil, nil, "DAMAGER", 4 end,
+        statsProArchonTargets = archonTargetsFixture(),
+        getHaste = function() return haste end,
+        getMasteryEffect = function() return mastery, 1 end,
+        getCombatRating = function() return 300 end,
+        inCombatLockdown = function() return combat end,
+        issecretvalue = function(value) return value == protectedHaste or value == protectedMastery end,
+        setFormattedText = function(_, _, value)
+            assert(formatterReady, "native formatter unavailable")
+            assert(value == protectedHaste or value == protectedMastery)
+            return value == protectedHaste and hasteText or masteryText
+        end,
+        roundToNearestString = function() error("rounding formatter unavailable") end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(test.profileOps.enableAccountWide(test.profileState().profileID))
+    local settings = test.profileState().settings
+    settings.showOffensive, settings.showHaste, settings.showMastery = true, true, true
+    settings.showCrit, settings.showVersatility = false, false
+    settings.showPercentage, settings.showRating, settings.hideZeroOffensive = true, false, false
+    test.cacheSettings()
+    local function assertPercentages(expectedHaste, expectedMastery, phase)
+        assert(addon:RunUpdateStatsSafe(), phase)
+        local block = test.buildRenderBlocks()[2]
+        assert(#block.labels == 2, phase .. ": both rows must be visible")
+        assert(plain(block.ratings[1] .. block.values[1]) == expectedHaste, phase .. ": Haste")
+        assert(plain(block.ratings[2] .. block.values[2]) == expectedMastery, phase .. ": Mastery")
+        return block
+    end
+    assertPercentages("18.5%", "24.8%", "clean seed")
+    combat, haste, mastery = true, nil, nil
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    local fallback = assertPercentages("18.5%", "24.8%", "unavailable in combat")
+    assert(fallback.targetRows[2] and fallback.targetRows[2].currentPct == nil,
+        "the display fallback is not a live Mastery sample for Archon")
+    settings.showRating, settings.hideZeroOffensive = true, true
+    test.cacheSettings()
+    assertPercentages("300 |18.5%", "300 |24.8%", "dual columns and Hide Zero")
+    settings.showRating = false
+    test.cacheSettings()
+    haste, mastery = protectedHaste, protectedMastery
+    assertPercentages("23.0%", "30.0%", "protected live values")
+    hasteText, masteryText = "41.0%", "33.0%"
+    assertPercentages("41.0%", "33.0%", "consecutive protected live values")
+    formatterReady = false
+    assertPercentages("18.5%", "24.8%", "both formatters failed")
+    combat, haste, mastery = false, nil, nil
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
+    assertPercentages("18.5%", "24.8%", "unavailable just after combat")
+    haste, mastery = 20, 26
+    assertPercentages("20.0%", "26.0%", "clean recovery")
+    haste, mastery = 0, 0
+    assert(#test.buildRenderBlocks()[2].labels == 0, "readable zeros respect Hide Zero")
+    haste, mastery = nil, nil
+    assert(#test.buildRenderBlocks()[2].labels == 0, "retained zeros respect Hide Zero")
+    settings.hideZeroOffensive = false
+    test.cacheSettings()
+    assertPercentages("0.0%", "0.0%", "retained zeros are visible when requested")
+    haste, mastery = 21, 34
+    assertPercentages("21.0%", "34.0%", "seed before spec change")
+    spec, haste, mastery = nil, nil, nil
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    assert(#test.buildRenderBlocks()[2].labels == 0, "unresolved spec cannot borrow old percentages")
+    spec = 63
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    assert(#test.buildRenderBlocks()[2].labels == 0, "confirmed new spec cannot borrow old percentages")
+    haste, mastery = 13, 17
+    assertPercentages("13.0%", "17.0%", "new spec seeds its own fallback")
+    haste, mastery = nil, nil
+    assertPercentages("13.0%", "17.0%", "new spec fallback")
+    env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 16)
+    assert(#test.buildRenderBlocks()[2].labels == 0, "new equipment invalidates prior percentages")
+    haste, mastery = 15, 19
+    assertPercentages("15.0%", "19.0%", "seed before effective level change")
+    haste, mastery = nil, nil
+    env.__fireEvent("PLAYER_LEVEL_CHANGED", 80, 79)
+    assert(#test.buildRenderBlocks()[2].labels == 0, "a changed level invalidates prior percentages")
+    print("Retail Haste and Mastery display fallback regressions passed")
+end
+
+if not forever then
     local spec, rating, haste = 64, 1200, 13
     local armor, combat = 2500, false
     local versMode = "clean"

@@ -10316,6 +10316,53 @@ function Panel:DBKey(suffix)
     return self.dbKeyPrefix .. suffix
 end
 
+function Panel:ApplyViewportFit()
+    if self.dragActive then return true end
+    local scale = self.requestedScale or 1
+    local viewport = addon.panelEditRuntime
+    local width, height = self.lastFrameWidth, self.lastFrameHeight
+    local effective = scale
+    if viewport.viewportWidth and viewport.viewportHeight and width and height and width > 0 and height > 0 then
+        effective = math.min(scale, viewport.viewportWidth / width, viewport.viewportHeight / height)
+    end
+    local previous = self.effectiveScale or 1
+    local oldFactor = self.viewportOffsetFactor or 1
+    local factor = scale / effective
+    if previous == effective and oldFactor == factor then return true end
+
+    local frame = self.frame
+    local point, relativeTo, relativePoint, x, y
+    local reanchor = oldFactor ~= factor and self.positionLoaded
+    if reanchor then
+        local readOK
+        readOK, point, relativeTo, relativePoint, x, y = pcall(frame.GetPoint, frame)
+        if not readOK or not addon.dbRuntime.IsCleanType(point, "string") or not VALID_ANCHOR_POINTS[point]
+            or not addon.dbRuntime.IsCleanType(relativePoint, "string") or not VALID_ANCHOR_POINTS[relativePoint]
+            or not SAFE_NUM.IsCleanFiniteNumber(x) or not SAFE_NUM.IsCleanFiniteNumber(y) then return false end
+    end
+    local ok = pcall(function()
+        if previous ~= effective then frame:SetScale(effective) end
+        -- SetPoint offsets use this frame's coordinates. Changing the effective
+        -- scale alone would move its anchor even when the saved position is stable.
+        if reanchor then
+            frame:ClearAllPoints()
+            frame:SetPoint(point, relativeTo, relativePoint, x / oldFactor * factor, y / oldFactor * factor)
+            frame:SetUserPlaced(true)
+        end
+    end)
+    if not ok then
+        pcall(frame.SetScale, frame, previous)
+        if reanchor then
+            frame:ClearAllPoints()
+            pcall(frame.SetPoint, frame, point, relativeTo, relativePoint, x, y)
+        end
+        error("panel scale apply failed")
+    end
+    self.effectiveScale = effective
+    self.viewportOffsetFactor = factor
+    return true
+end
+
 function Panel:SavePositionTo(db, fromDrag)
     -- A viewport fallback is only for display. An explicit move replaces it.
     if (self.positionUsesViewportFallbackX or self.positionUsesViewportFallbackY) and not fromDrag then return end
@@ -10324,7 +10371,10 @@ function Panel:SavePositionTo(db, fromDrag)
     if not addon.dbRuntime.IsCleanTable(db)
         or not addon.dbRuntime.IsCleanType(point, "string") or not VALID_ANCHOR_POINTS[point]
         or not addon.dbRuntime.IsCleanType(relativePoint, "string") or not VALID_ANCHOR_POINTS[relativePoint]
-        or not addon.positionRuntime.IsPortableOffset(xOfs)
+        or not SAFE_NUM.IsCleanFiniteNumber(xOfs) or not SAFE_NUM.IsCleanFiniteNumber(yOfs) then return end
+    local factor = self.viewportOffsetFactor or 1
+    xOfs, yOfs = xOfs / factor, yOfs / factor
+    if not addon.positionRuntime.IsPortableOffset(xOfs)
         or not addon.positionRuntime.IsPortableOffset(yOfs) then return end
     db[self:DBKey("point")] = point
     db[self:DBKey("relativePoint")] = relativePoint
@@ -10373,6 +10423,7 @@ function Panel:FinishMouseDrag(savePosition)
     self.frame:StopMovingOrSizing()
     if savePosition ~= false and settings then self:SavePosition(settings) end
     self:ScheduleDragGuardRelease()
+    if savePosition ~= false then pcall(self.ApplyViewportFit, self) end
     return settings
 end
 
@@ -10409,9 +10460,10 @@ function Panel:LoadPosition()
     local yOfs             = NormalizePositionOffset(db[yOfsKey], defaults[yOfsKey] or 0, "y")
 
     local oldPoint, oldRelativeTo, oldRelativePoint, oldX, oldY = self.frame:GetPoint()
+    local factor = self.viewportOffsetFactor or 1
     self.frame:ClearAllPoints()
     local positioned = pcall(
-        self.frame.SetPoint, self.frame, point, UIParent, relativePoint, xOfs, yOfs)
+        self.frame.SetPoint, self.frame, point, UIParent, relativePoint, xOfs * factor, yOfs * factor)
     -- WHY: SetUserPlaced(true) AFTER SetPoint marks the frame as user-positioned at our
     -- chosen anchor. Required in 12.x retail for StartMoving/StopMovingOrSizing to commit
     -- the new position to the frame's internal anchor — without it, GetPoint() can return
@@ -10431,16 +10483,7 @@ function Panel:LoadPosition()
     end
     self.positionUsesViewportFallbackX = addon.positionRuntime.IsPortableOffset(db[xOfsKey]) and db[xOfsKey] ~= xOfs
     self.positionUsesViewportFallbackY = addon.positionRuntime.IsPortableOffset(db[yOfsKey]) and db[yOfsKey] ~= yOfs
-    -- WHY: scale is set via SetAllPanelsScale (single ownership); not duplicated here
-end
-
-function Panel:HasViewportSensitivePosition(settings)
-    local x = settings[self:DBKey("xOfs")]
-    local y = settings[self:DBKey("yOfs")]
-    local floor = addon.positionRuntime.legacyOffsetFloor
-    return self.positionUsesViewportFallbackX or self.positionUsesViewportFallbackY
-        or (addon.positionRuntime.IsPortableOffset(x) and math.abs(x) > floor)
-        or (addon.positionRuntime.IsPortableOffset(y) and math.abs(y) > floor)
+    self.positionLoaded = true
 end
 
 function Panel:NeedsViewportPositionRefresh(settings)
@@ -10685,8 +10728,8 @@ function addon.archonTargets.GetTooltip()
         if self.statDivider then self.statSide = "right" end
         self.owner = owner
     end
-    function tooltip:AddLine(text, r, g, b, wrapText)
-        self.lines[#self.lines + 1] = { left = text, color = { r, g, b }, wrapText = wrapText, isDouble = false }
+    function tooltip:AddLine(text, r, g, b)
+        self.lines[#self.lines + 1] = { left = text, color = { r, g, b }, isDouble = false }
     end
     function tooltip:AddDoubleLine(left, right, lr, lg, lb, rr, rg, rb)
         self.lines[#self.lines + 1] = { left = left, right = right, isDouble = true,
@@ -10722,6 +10765,11 @@ end
 function addon.archonTargets.InvalidateTooltipLayout()
     local tooltip = addon.archonTargets.tooltip
     if tooltip then tooltip.layoutReusable = false end
+end
+
+function addon.archonTargets.FitTooltipToViewport(tooltip)
+    addon.settingsDesign.ApplyViewportScale(tooltip, addon.settingsDesign.ReadUIParentWidth(),
+        addon.settingsDesign.ReadUIParentHeight(), 1)
 end
 
 function addon.archonTargets.LayoutTooltip(tooltip)
@@ -10949,22 +10997,22 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     tooltip.layoutReusable = false
     local previousLines = tooltip.lines
     tooltip.lines = {}
-    tooltip:AddLine(addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0, true)
+    tooltip:AddLine(addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0)
     -- Profile and sample metadata form one header block. Wrapped metadata
     -- stays separate from the numeric comparison columns.
     local subtitle = addon.archonTargets.FormatSnapshotDate(meta.capturedAt)
     if subtitle == "" then subtitle = nil end
-    if subtitle then tooltip:AddLine(subtitle, 0.6, 0.6, 0.6, true) end
+    if subtitle then tooltip:AddLine(subtitle, 0.6, 0.6, 0.6) end
     local snapshotKey = addon.archonTargets.ResolveAvailableSnapshotKey(meta.snapshotKey)
     local detail = addon.archonTargets.GetSnapshotDetail(snapshotKey, addon.archonTargets.GetRootSnapshot(snapshotKey))
-    if detail then tooltip:AddLine(detail, 0.6, 0.6, 0.6, true) end
+    if detail then tooltip:AddLine(detail, 0.6, 0.6, 0.6) end
     if comparisonState == "lastKnown" then
-        tooltip:AddLine(L("Last known comparison"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
+        tooltip:AddLine(L("Last known comparison"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3])
     elseif comparisonState == "liveOnly" then
-        tooltip:AddLine(L("Live values; comparison unavailable"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
+        tooltip:AddLine(L("Live values; comparison unavailable"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3])
     end
     if meta.currentPctIsProxy and meta.currentPctSourceLabel then
-        tooltip:AddLine(L(meta.currentPctSourceLabel), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
+        tooltip:AddLine(L(meta.currentPctSourceLabel), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3])
     end
     addon.archonTargets.AddTooltipRow(L("Target:"), addon.archonTargets.FormatRatingWithBonus(meta.target, targetDisplayBonus, false))
     if hasComparison or hasLiveCurrent then
@@ -10984,10 +11032,11 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
         and addon.archonTargets.CanReuseTooltipLayout(tooltip, previousLines) then
         tooltip.lines = previousLines
         tooltip.layoutReusable = true
-        return true
+    else
+        tooltip:Layout()
+        tooltip:Show()
     end
-    tooltip:Layout()
-    tooltip:Show()
+    addon.archonTargets.FitTooltipToViewport(tooltip)
     return true
 end
 
@@ -11045,7 +11094,7 @@ function addon.forever.ShowStatTooltip(anchor, meta)
     tooltip.lines = {}
     local function add(label, value, style)
         if value == nil then
-            tooltip:AddLine(L(label), 0.72, 0.80, 0.90, true)
+            tooltip:AddLine(L(label), 0.72, 0.80, 0.90)
         elseif style == "rate" then
             tooltip:AddDoubleLine(L(label), value, 0.53, 0.65, 0.77, 0.69, 0.79, 0.90)
         else
@@ -11058,7 +11107,7 @@ function addon.forever.ShowStatTooltip(anchor, meta)
     if display then
         tooltip:AddDoubleLine(title, display, 0.68, 0.83, 1, 0.97, 0.98, 1)
     else
-        tooltip:AddLine(title, 0.68, 0.83, 1, true)
+        tooltip:AddLine(title, 0.68, 0.83, 1)
     end
     if meta.state == "stale" then add("Last reliable reading") end
     if meta.state == "clean" then
@@ -11079,6 +11128,7 @@ function addon.forever.ShowStatTooltip(anchor, meta)
         tooltip:Layout()
         tooltip:Show()
     end
+    addon.archonTargets.FitTooltipToViewport(tooltip)
     if type(panel.GetRight) == "function" and type(panel.GetEffectiveScale) == "function"
         and type(UIParent.GetEffectiveScale) == "function" then
         local right, screenWidth = panel:GetRight(), UIParent:GetWidth()
@@ -11087,7 +11137,7 @@ function addon.forever.ShowStatTooltip(anchor, meta)
             and SAFE_NUM.IsCleanFiniteNumber(panelScale) and SAFE_NUM.IsCleanFiniteNumber(rootScale)
             and rootScale > 0 then
             local rightSpace = screenWidth - right * panelScale / rootScale
-            local neededSpace = tooltip:GetWidth() + 10
+            local neededSpace = (tooltip:GetWidth() + 10) * tooltip:GetScale()
             local side = "right"
             if rightSpace < neededSpace then
                 local left = type(panel.GetLeft) == "function" and panel:GetLeft()
@@ -11425,6 +11475,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
         self.lastHasRepair = hasRepair
         self.heightDirty = false
     end
+    self:ApplyViewportFit()
     self:ApplyTooltipRows(targetRows, lineCount)
 end
 
@@ -11937,10 +11988,33 @@ local function LoadAllPositions()
     defensivePanel:LoadPosition()
 end
 
+function addon.panelEditRuntime.RefreshViewport()
+    local runtime = addon.panelEditRuntime
+    local width = addon.settingsDesign.ReadUIParentWidth()
+    local height = addon.settingsDesign.ReadUIParentHeight()
+    if width and height then
+        runtime.viewportWidth = width
+        runtime.viewportHeight = height
+    end
+end
+
 local function SetAllPanelsScale(scale)
     scale = NormalizeNumberSetting("scale", scale)
-    mainPanel.frame:SetScale(scale)
-    defensivePanel.frame:SetScale(scale)
+    if not addon.panelEditRuntime.viewportWidth then addon.panelEditRuntime.RefreshViewport() end
+    local previous = mainPanel.requestedScale
+    mainPanel.requestedScale = scale
+    defensivePanel.requestedScale = scale
+    local applied = pcall(function()
+        if not mainPanel:ApplyViewportFit() or not defensivePanel:ApplyViewportFit() then
+            error("panel scale apply pending")
+        end
+    end)
+    if applied then return end
+    mainPanel.requestedScale = previous
+    defensivePanel.requestedScale = previous
+    pcall(mainPanel.ApplyViewportFit, mainPanel)
+    pcall(defensivePanel.ApplyViewportFit, defensivePanel)
+    error("panel scale apply failed")
 end
 
 --[[ ============================================================
@@ -15732,12 +15806,9 @@ local function RunCoalesced(key, delay, fn)
 end
 
 function addon.settingsDesign.RequestResponsiveFrameResize()
-    local settings = isLoaded and addon.dbRuntime.GetActiveSettings()
     local welcome = addon.hudPresets.welcome
-    if not addon.settingsUI.frame and type(addon.profileUI.ApplyManagerSize) ~= "function"
-        and not (welcome and welcome:IsVisible())
-        and not (settings and (mainPanel:HasViewportSensitivePosition(settings)
-            or defensivePanel:HasViewportSensitivePosition(settings))) then return end
+    if not isLoaded and not addon.settingsUI.frame and type(addon.profileUI.ApplyManagerSize) ~= "function"
+        and not (welcome and welcome:IsVisible()) then return end
     local attempt = 0
     local function refresh()
         attempt = attempt + 1
@@ -15753,9 +15824,7 @@ function addon.settingsDesign.RequestResponsiveFrameResize()
             end
             -- UIParent can settle after the first callback. Retry a failed native
             -- apply once more, always projecting the latest settings and viewport.
-            local sensitive = mainPanel:HasViewportSensitivePosition(active)
-                or defensivePanel:HasViewportSensitivePosition(active)
-            retryPositions = (attempt == 1 and sensitive)
+            retryPositions = attempt == 1
                 or (attempt == 2 and not (mainOK and defensiveOK))
         end
         local settingsFrame = addon.settingsUI.frame
@@ -15774,6 +15843,11 @@ function addon.settingsDesign.RequestResponsiveFrameResize()
             pcall(applyManager)
         end
         if welcomeShown then pcall(addon.hudPresets.ApplyWelcomeScale, welcome) end
+        if isLoaded then
+            addon.panelEditRuntime.RefreshViewport()
+            pcall(mainPanel.ApplyViewportFit, mainPanel)
+            pcall(defensivePanel.ApplyViewportFit, defensivePanel)
+        end
         local retryWindows = attempt == 1 and (settingsShown or profilesShown or welcomeShown)
         if retryPositions or retryWindows then RunCoalesced("responsiveFrameSize", 0.1, refresh) end
     end
@@ -19899,12 +19973,8 @@ function addon.settingsUI.BuildLayoutTab(self, context)
     -- sizes the panel (visual layout), not the text rendering.
     CreateConfigSlider(layoutTab, "StatsProScaleSlider", "Scale:", "scale", cd,
         0.5, 2.0, 0.1, "0.5", "2.0", "%.1f",
-        function(value, previous)
-            if pcall(SetAllPanelsScale, value) then return true end
-            -- Either panel may have changed before the native setter failed.
-            pcall(mainPanel.frame.SetScale, mainPanel.frame, previous)
-            pcall(defensivePanel.frame.SetScale, defensivePanel.frame, previous)
-            return false
+        function(value)
+            return pcall(SetAllPanelsScale, value)
         end)
 
     -- Refresh rate slider — controls how often stat values recompute (seconds).

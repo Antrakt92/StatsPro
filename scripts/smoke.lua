@@ -635,7 +635,11 @@ local function makeFrame(name, setFontResult, parent)
     function frame:GetUnboundedStringWidth()
         if self.statsProWidthOverride ~= nil then return self.statsProWidthOverride end
         local _, size = self:GetFont()
-        return utf8VisualUnits(self.text or "") * ((size or 12) * 0.5)
+        local width = 0
+        for line in ((self.text or "") .. "\n"):gmatch("(.-)\n") do
+            width = math.max(width, utf8VisualUnits(line))
+        end
+        return width * ((size or 12) * 0.5)
     end
     function frame:GetStringWidth() return self:GetUnboundedStringWidth() end
     function frame:GetStringHeight()
@@ -1578,8 +1582,8 @@ do
         { 1, 0.35, 0.35 })
     assertDeepEqual("tooltip.compact.missing_value_color", archonTooltip(compactEnv).lines[5].rightColor,
         { 1, 0.35, 0.35 })
-    eq("tooltip.compact.header_wraps", archonTooltip(compactEnv).lines[1].wrapText, true)
-    eq("tooltip.compact.subtitle_wraps", archonTooltip(compactEnv).lines[2].wrapText, true)
+    eq("tooltip.compact.header_wraps", archonTooltip(compactEnv).regions[1].leftText.wordWrap, true)
+    eq("tooltip.compact.subtitle_wraps", archonTooltip(compactEnv).regions[2].leftText.wordWrap, true)
     assertDeepEqual("tooltip.compact.subtitle_color", archonTooltip(compactEnv).lines[2].color,
         { 0.6, 0.6, 0.6 })
     for _, index in ipairs({ 1, 2 }) do
@@ -1607,8 +1611,8 @@ do
     local tooltip = geometryTest.getArchonTooltip()
     local function draw(title)
         tooltip.lines = {}
-        tooltip:AddLine(title, 1, 0.82, 0, true)
-        tooltip:AddLine("13-Oct-26", 0.6, 0.6, 0.6, true)
+        tooltip:AddLine(title, 1, 0.82, 0)
+        tooltip:AddLine("13-Oct-26", 0.6, 0.6, 0.6)
         tooltip:AddDoubleLine("Target:", "1006", 0.7, 0.7, 0.7, 1, 1, 1)
         tooltip:AddDoubleLine("Current:", "|cff00ff00971|r", 0.7, 0.7, 0.7, 1, 1, 1)
         tooltip:Layout()
@@ -1625,7 +1629,7 @@ do
     eq("tooltip.owned.long_metadata_wrap_height", tooltip.lines[1].height > headerSize, true)
     assertOwnedTooltipLayout("tooltip.owned.long_metadata_geometry", tooltip)
     tooltip.lines = {}
-    tooltip:AddLine("M+ High Keys", 1, 0.82, 0, true)
+    tooltip:AddLine("M+ High Keys", 1, 0.82, 0)
     tooltip:AddDoubleLine("Target:", "1006", 0.7, 0.7, 0.7, 1, 1, 1)
     tooltip:Layout()
     eq("tooltip.owned.recycled_metadata_becomes_numeric", tooltip.regions[2].leftText.justifyH, "RIGHT")
@@ -1782,7 +1786,9 @@ do
                 local row = archonTooltip(stateEnv).lines[index]
                 eq(prefix .. ".text." .. index, row.left, text)
                 eq(prefix .. ".is_numeric." .. index, row.right ~= nil, index >= firstNumeric)
-                if index < firstNumeric then eq(prefix .. ".wraps." .. index, row.wrapText, true) end
+                if index < firstNumeric then
+                    eq(prefix .. ".wraps." .. index, archonTooltip(stateEnv).regions[index].leftText.wordWrap, true)
+                end
             end
         end
     end
@@ -1810,7 +1816,7 @@ do
         if case.text then
             eq(prefix .. ".subtitle", archonTooltip(footerEnv).lines[2].left, case.text)
             eq(prefix .. ".subtitle_no_right_column", archonTooltip(footerEnv).lines[2].right, nil)
-            eq(prefix .. ".subtitle_wraps", archonTooltip(footerEnv).lines[2].wrapText, true)
+            eq(prefix .. ".subtitle_wraps", archonTooltip(footerEnv).regions[2].leftText.wordWrap, true)
             assertDeepEqual(prefix .. ".subtitle_color", archonTooltip(footerEnv).lines[2].color,
                 { 0.6, 0.6, 0.6 })
         end
@@ -1871,11 +1877,11 @@ do
             eq(prefix .. ".subtitle_no_right_column." .. profile.key,
                 archonTooltip(localeEnv).lines[2].right, nil)
             eq(prefix .. ".subtitle_wraps." .. profile.key,
-                archonTooltip(localeEnv).lines[2].wrapText, true)
+                archonTooltip(localeEnv).regions[2].leftText.wordWrap, true)
             local firstNumeric = 3
             if profile.key == "mythicPlusCurrent" then
                 eq(prefix .. ".sample_detail." .. profile.key, archonTooltip(localeEnv).lines[3].left, "+7 to +22")
-                eq(prefix .. ".detail_wraps." .. profile.key, archonTooltip(localeEnv).lines[3].wrapText, true)
+                eq(prefix .. ".detail_wraps." .. profile.key, archonTooltip(localeEnv).regions[3].leftText.wordWrap, true)
                 assertDeepEqual(prefix .. ".detail_color." .. profile.key, archonTooltip(localeEnv).lines[3].color,
                     { 0.6, 0.6, 0.6 })
                 firstNumeric = 4
@@ -2986,7 +2992,7 @@ do
     eq("tooltip.restricted_last_known.delta_label", tooltipRowLabel(tooltipNumericRow(archonTooltip(targetOnlyEnv), 3)), "Missing:")
     eq("tooltip.restricted_last_known.sample_detail", archonTooltip(targetOnlyEnv).lines[3].left, "+7 to +20")
     eq("tooltip.restricted_last_known.source_date", archonTooltip(targetOnlyEnv).lines[2].left, "15-May-26")
-    eq("tooltip.restricted_last_known.notice_wraps", archonTooltip(targetOnlyEnv).lines[4].wrapText, true)
+    eq("tooltip.restricted_last_known.notice_wraps", archonTooltip(targetOnlyEnv).regions[4].leftText.wordWrap, true)
     eq("tooltip.restricted_last_known.notice_before_target", archonTooltip(targetOnlyEnv).lines[5].left, "Target:")
 end
 
@@ -16652,6 +16658,10 @@ do
             return secretDimension ~= nil and value == secretDimension
         end,
     }))
+    local unloadedTimers = #resizeEnv.__timers
+    resizeEnv.__fireEvent("DISPLAY_SIZE_CHANGED")
+    resizeEnv.__fireEvent("UI_SCALE_CHANGED")
+    local unloadedTimersAfterResize = #resizeEnv.__timers
     fireEvent("config.live_resize.pew", resizeEnv, "PLAYER_ENTERING_WORLD")
     resizeEnv.StatsProDB.characters["Player-1-RESIZE-OFFLINE"] = {
         displayName = "Offline-Realm",
@@ -16669,12 +16679,12 @@ do
         if type(frame.scripts.OnUpdate) == "function" then onUpdateBefore = onUpdateBefore + 1 end
     end
 
-    local preconstructionTimers = #resizeEnv.__timers
     resizeEnv.UIParent:SetSize(1024, 500)
     fireEvent("config.live_resize.preconstruction.display", resizeEnv, "DISPLAY_SIZE_CHANGED")
     fireEvent("config.live_resize.preconstruction.scale", resizeEnv, "UI_SCALE_CHANGED")
+    resizeEnv.__flushTimers(0.1)
     eq("config.live_resize.preconstruction.no_frame", resizeEnv.StatsProConfigFrame, nil)
-    eq("config.live_resize.preconstruction.no_timer", #resizeEnv.__timers, preconstructionTimers)
+    eq("config.live_resize.preconstruction.no_timer", unloadedTimersAfterResize, unloadedTimers)
 
     resizeAddon:OpenConfigMenu()
     local config = exists("config.live_resize.frame", resizeEnv.StatsProConfigFrame)

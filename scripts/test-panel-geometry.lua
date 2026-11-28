@@ -767,5 +767,145 @@ do
         coldTest.panelFontState().sideFontRegions[4]:GetText(), "coin:" .. price .. ":14")
 end
 
+do
+    local inCombat = false
+    local restrictedDimension = {}
+    local function loadViewport(width, height, settings)
+        local testEnv, testAddon, view = fixtures.loadStatsPro("enUS", {
+            forever = forever, uiParentWidth = width, uiParentHeight = height,
+            inCombatLockdown = function() return inCombat end,
+            issecretvalue = function(value) return value == restrictedDimension end,
+            statsProDB = settings,
+            unitGUID = function() return "Player-ViewportFit" end,
+            specIndex = 1, specID = 64,
+            getInventoryItemDurability = function(slot)
+                if slot == 1 then return 60, 100 end
+            end,
+        })
+        testEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+        return testEnv, testAddon, view
+    end
+    local viewportEnv, viewportAddon, view = loadViewport(1280, 960, {
+        fontSize = 32, scale = 2, xOfs = 25, yOfs = 30,
+        displayMode = "split", showDurability = true, splitDurability = true,
+    })
+    local main, side = viewportEnv.StatsProFrame, viewportEnv.StatsProDefensiveFrame
+    local function renderDense(view, width)
+        view.setPanelMeasurementOverride("main", "label", width or 200, 384)
+        view.setPanelMeasurementOverride("main", "rating", 75, 384)
+        view.setPanelMeasurementOverride("main", "value", 65, 384)
+        view.renderMainPanelForSmoke("Stats:", "150", "10.0%", 12)
+    end
+    local function physicalOffset(frame)
+        local _, _, _, x = frame:GetPoint()
+        return x * frame:GetScale()
+    end
+    local function resize(width, height)
+        viewportEnv.UIParent:SetSize(width, height)
+        viewportEnv.__fireEvent("DISPLAY_SIZE_CHANGED")
+        viewportEnv.__flushTimers(0)
+    end
+    local function near(actual, want)
+        return math.abs(actual - want) < 0.000001
+    end
+    view.setPanelMeasurementOverride("side", "label", 40, 32)
+    view.setPanelMeasurementOverride("side", "rating", 24, 32)
+    view.setPanelMeasurementOverride("side", "value", 25, 32)
+    view.setPanelMeasurementOverride("side", "repair", 35, 32)
+    view.setPanelMeasurementOverride("side", "repairLabel", 34, 32)
+    viewportAddon:RunUpdateStatsSafe()
+    renderDense(view)
+    equal("wide viewport uses the saved scale", main:GetScale(), 2)
+    equal("split durability starts visible at requested scale", side:IsShown() and side:GetScale(), 2)
+    resize(640, 360)
+    equal("dense stat rows fit the narrow viewport", near(main:GetHeight() * main:GetScale(), 360), true)
+    equal("only the overflowing panel shrinks", side:GetScale(), 2)
+    equal("viewport fit preserves the physical anchor", near(physicalOffset(main), 50), true)
+    equal("viewport fit leaves saved zoom and position unchanged", view.getDB("scale") == 2
+        and view.getDB("xOfs") == 25, true)
+
+    local nativeWidth = viewportEnv.UIParent.GetWidth
+    viewportEnv.UIParent.GetWidth = function() return restrictedDimension end
+    local fittedScale = main:GetScale()
+    resize(280, 330)
+    equal("restricted viewport sample preserves the last clean cap", main:GetScale(), fittedScale)
+    viewportEnv.UIParent.GetWidth = nativeWidth
+    viewportEnv.__flushTimers(0.1)
+    equal("settled viewport applies both constraints", near(main:GetWidth() * main:GetScale(), 280), true)
+
+    local oldGetPoint = main.GetPoint
+    local fittedBeforePartial = main:GetScale()
+    main.GetPoint = function(frame)
+        local point, ownerFrame, relativePoint = oldGetPoint(frame)
+        return point, ownerFrame, relativePoint, nil, 30
+    end
+    resize(240, 320)
+    equal("a partial anchor defers scale projection", main:GetScale(), fittedBeforePartial)
+    main.GetPoint = oldGetPoint
+    viewportEnv.__flushTimers(0.1)
+    equal("the settled anchor applies the cap exactly once", near(main:GetWidth() * main:GetScale(), 240)
+        and near(physicalOffset(main), 50), true)
+    resize(280, 330)
+
+    viewportAddon:OpenConfigMenu()
+    local slider = viewportEnv.StatsProScaleSlider
+    local sideSetScale = side.SetScale
+    local rejectNextScale = true
+    side.SetScale = function(panel, scale)
+        sideSetScale(panel, scale)
+        if rejectNextScale then
+            rejectNextScale = false
+            error("native scale rejected after applying")
+        end
+    end
+    local priorScale = main:GetScale()
+    slider:SetValue(1.8)
+    equal("failed zoom preserves each panel's previous effective scale",
+        main:GetScale() == priorScale and side:GetScale() == 2, true)
+    equal("failed zoom preserves physical anchor and saved scale", near(physicalOffset(main), 50)
+        and view.getDB("scale") == 2 and slider:GetValue() == 2, true)
+    slider:SetValue(1.8)
+    equal("retry commits requested zoom with main still capped",
+        view.getDB("scale") == 1.8 and main:GetScale() == priorScale and side:GetScale() == 1.8, true)
+    slider:SetValue(2)
+
+    main.scripts.OnDragStart(main)
+    resize(210, 220)
+    equal("resizing does not interrupt the native drag", main.moving and main:GetScale() == priorScale, true)
+    main:ClearAllPoints()
+    main:SetPoint("CENTER", viewportEnv.UIParent, "CENTER", 90 / priorScale, 30 / priorScale)
+    main.scripts.OnDragStop(main)
+    equal("dropping applies the latest viewport without shifting the anchor",
+        near(main:GetHeight() * main:GetScale(), 220) and near(physicalOffset(main), 90), true)
+    equal("a drop saves offsets in the requested scale's coordinates",
+        near(view.getDB("xOfs"), 45) and near(view.getDB("yOfs"), 15), true)
+
+    inCombat = true
+    viewportEnv.__fireEvent("PLAYER_REGEN_DISABLED")
+    renderDense(view, 460)
+    equal("long combat rows stay within the observed viewport", near(main:GetWidth() * main:GetScale(), 210), true)
+    equal("combat geometry leaves the saved position intact", near(view.getDB("xOfs"), 45), true)
+    inCombat = false
+    viewportEnv.__fireEvent("PLAYER_REGEN_ENABLED")
+    viewportEnv.__fireEvent("PLAYER_LOGOUT")
+    local reopenedEnv, _, reopened = loadViewport(210, 220, viewportEnv.StatsProDB)
+    renderDense(reopened, 460)
+    equal("reload preserves the fitted anchor and saved zoom",
+        near(physicalOffset(reopenedEnv.StatsProFrame), 90) and reopened.getDB("scale") == 2, true)
+
+    local replacement = view.copyDefaults()
+    replacement.scale, replacement.fontSize, replacement.xOfs = 0.8, 32, 30
+    rejectNextScale = true
+    local replaced = view.profileOps.importAndAssign(replacement)
+    equal("failed profile apply preserves fitted zoom and anchor", not replaced and view.getDB("scale") == 2
+        and near(physicalOffset(main), 90), true)
+    side.SetScale = sideSetScale
+    resize(1280, 960)
+    equal("widening restores requested zoom and physical anchor",
+        main:GetScale() == 2 and near(physicalOffset(main), 90), true)
+    equal("retry applies the incoming profile's zoom and anchor", view.profileOps.importAndAssign(replacement)
+        and main:GetScale() == 0.8 and near(physicalOffset(main), 24), true)
+end
+
 if #errors > 0 then error(table.concat(errors, "\n"), 0) end
 print((forever and "Forever" or "Retail") .. " HUD clean/restricted geometry and visibility passed")

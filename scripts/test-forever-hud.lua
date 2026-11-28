@@ -1842,4 +1842,44 @@ for _, forever in ipairs({ false, true }) do
     check(welcome:IsShown() and not view.hudPresets.state().welcomeSeen,
         flavor .. " responsive resize preserves the active first-run prompt")
 end
+for _, forever in ipairs({ false, true }) do
+    local flavor = forever and "Forever" or "Retail"
+    local env, addon = fixtures.loadStatsPro("enUS", { forever = forever })
+    local panel = env.CreateFrame("Frame", nil, env.UIParent)
+    local anchor = env.CreateFrame("Button", nil, panel)
+    local function showTooltip()
+        if forever then
+            return addon.forever.ShowStatTooltip(anchor,
+                { key = "Strength", label = "Strength", state = "stale", display = "130" })
+        end
+        return addon.archonTargets.ShowTooltip(anchor,
+            { statKey = "haste", target = 2000, current = 1000, delta = -1000 })
+    end
+
+    env.UIParent:SetSize(190, 100)
+    check(showTooltip(), flavor .. " opens the tooltip on a narrow viewport")
+    local tooltip = env.StatsProTargetTooltip
+    local function fitsViewport()
+        return tooltip:GetWidth() * tooltip:GetScale() <= env.UIParent:GetWidth()
+            and tooltip:GetHeight() * tooltip:GetScale() <= env.UIParent:GetHeight()
+    end
+    check(fitsViewport() and tooltip:GetScale() < 1, flavor .. " tooltip fits the narrow viewport")
+    env.UIParent:SetSize(1000, 65)
+    check(showTooltip() and fitsViewport() and tooltip:GetScale() < 1,
+        flavor .. " tooltip fits a short viewport without changing its content")
+    env.UIParent:SetSize(1000, 800)
+    check(showTooltip() and tooltip:GetScale() == 1, flavor .. " tooltip restores its normal scale")
+    if forever then
+        panel.GetLeft = function() return 170 end
+        panel.GetRight = function() return 250 end
+        panel.GetEffectiveScale = function() return 1 end
+        env.UIParent.GetEffectiveScale = function() return 1 end
+        env.UIParent:SetSize(400, 60)
+        check(showTooltip() and tooltip:GetPoint() == "TOPLEFT",
+            "Forever finds room on the right using the scaled tooltip width")
+        env.UIParent:SetSize(400, 800)
+        check(showTooltip() and tooltip:GetPoint() == "TOPRIGHT",
+            "Forever moves the restored tooltip to the side with more room")
+    end
+end
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

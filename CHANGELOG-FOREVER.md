@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.25.6 - 28-Nov-2026 — HUD fitting and repair recovery
+
+- Keep the HUD and stat tooltips within small game windows. Restore the selected HUD scale when the window has room again.
+- Keep Quick Setup and profile controls reachable on small screens. Restore the previous HUD scale if a Settings change fails.
+- Refresh durability and repair costs after combat and recover repair costs when game data is delayed after closing the auction house.
+- Keep color previews in sync across stats that share the same crit color, including when you cancel a color change.
+
 ## 1.25.5 - 26-Nov-2026 — HUD formatting maintenance
 
 - Simplify the shared HUD number formatting while preserving Forever's existing display of the last reliable reading.

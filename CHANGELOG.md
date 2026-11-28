@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.25.8 - 28-Nov-2026 — HUD fitting and repair recovery
+
+- Keep the HUD and stat tooltips within small game windows. Restore the selected HUD scale when the window has room again.
+- Keep Quick Setup and profile controls reachable on small screens. Restore the previous HUD scale if a Settings change fails.
+- Refresh durability and repair costs after combat and recover repair costs when game data is delayed after closing the auction house.
+- Clear outdated Versatility and armor percentages when your level changes, and clear outdated armor percentages when you change equipment.
+
 ## 1.25.7 - 27-Nov-2026 — Archon target refresh
 
 - Updated Retail Archon stat targets for Mythic+ and Normal, Heroic, and Mythic raids.

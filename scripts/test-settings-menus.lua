@@ -41,6 +41,85 @@ local function fire(control, event)
     if control.scripts[event] then control.scripts[event](control) end
     for _, hook in ipairs(control.hooks[event] or {}) do hook(control) end
 end
+do
+    local env, addon, test = fixtures.loadStatsPro('enUS', {
+        forever = true, unitGUID = function() return 'Player-SharedSwatch' end,
+        unitClassToken = 'MAGE',
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    addon:OpenConfigMenu()
+
+    local melee = env.StatsProForeverMeleeCrit.statsProSwatch
+    local ranged = env.StatsProForeverRangedCrit.statsProSwatch
+    local spell = env.StatsProForeverSpellCrit.statsProSwatch
+    local stamina = env.StatsProForeverStamina.statsProSwatch
+    local unrelated = stamina.statsProColorWell.colorTexture
+    local function checkCrit(r, g, b, message)
+        for _, swatch in ipairs({ melee, ranged, spell }) do
+            local color = swatch.statsProColorWell.colorTexture
+            check(color.r == r and color.g == g and color.b == b, message)
+        end
+    end
+
+    fire(melee, 'OnClick')
+    env.__setColorPickerRGB(0.2, 0.3, 0.4)
+    env.ColorPickerFrame.swatchFunc()
+    checkCrit(0.2, 0.3, 0.4, 'preview updates every swatch sharing the Crit color')
+    check(stamina.statsProColorWell.colorTexture == unrelated, 'preview leaves unrelated colors untouched')
+    env.__acceptColorPicker()
+    local saved = test.profileState().settings.colors.crit
+    check(saved.r == 0.2 and saved.g == 0.3 and saved.b == 0.4, 'acceptance persists the shared color')
+    checkCrit(0.2, 0.3, 0.4, 'acceptance keeps every shared swatch synchronized')
+
+    fire(spell, 'OnClick')
+    env.__setColorPickerRGB(0.7, 0.8, 0.9)
+    env.ColorPickerFrame.swatchFunc()
+    checkCrit(0.7, 0.8, 0.9, 'selecting a sibling previews the same shared color')
+    env.__cancelColorPicker()
+    checkCrit(0.2, 0.3, 0.4, 'cancel restores the accepted color in every shared swatch')
+
+    fire(ranged, 'OnClick')
+    env.__setColorPickerRGB(0.4, 0.6, 0.8)
+    env.ColorPickerFrame.swatchFunc()
+    addon:OpenConfigMenu()
+    check(not env.ColorPickerFrame:IsShown(), 'closing Settings retires the shared color preview')
+    addon:OpenConfigMenu()
+    checkCrit(0.2, 0.3, 0.4, 'reopening Settings keeps all siblings at the accepted color')
+end
+for _, forever in ipairs({ false, true }) do
+    local env, addon, test = fixtures.loadStatsPro('enUS', {
+        forever = forever, unitGUID = function() return 'Player-ScaleRollback' end,
+        specIndex = 1, specID = 64,
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    addon:OpenConfigMenu()
+    local main, defensive = env.StatsProFrame, env.StatsProDefensiveFrame
+    local slider = env.StatsProScaleSlider
+    for _, failingPanel in ipairs({ main, defensive }) do
+        local baseline = test.getDB('scale')
+        local nativeScale = failingPanel.SetScale
+        local reject = true
+        failingPanel.SetScale = function(panel, scale)
+            nativeScale(panel, scale)
+            if reject then
+                reject = false
+                error('native scale rejected after applying')
+            end
+        end
+        check(pcall(slider.SetValue, slider, 1.8), 'slider contains the native scale failure')
+        check(test.getDB('scale') == baseline and slider:GetValue() == baseline,
+            'failed scale restores the saved value and slider thumb')
+        check(main:GetScale() == baseline and defensive:GetScale() == baseline,
+            'failed scale restores both panels, including a partially applied change')
+        check(env.StatsProScaleSliderText:GetText() == string.format('%.1f', baseline),
+            'failed scale restores the slider caption')
+        check(pcall(slider.SetValue, slider, 1.8) and test.getDB('scale') == 1.8
+            and main:GetScale() == 1.8 and defensive:GetScale() == 1.8,
+            'retry applies the requested scale after a transient native failure')
+        failingPanel.SetScale = nativeScale
+        slider:SetValue(baseline)
+    end
+end
 for _, forever in ipairs({ false, true }) do
     local env, addon, test = fixtures.loadStatsPro('enUS', {
         forever = forever, unitGUID = function() return 'Player-SettingsTimer' end,

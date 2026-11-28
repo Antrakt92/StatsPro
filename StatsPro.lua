@@ -14102,7 +14102,13 @@ end
 -- WHY: shared snapshot/select/cancel handler used by every swatch (CreateColorSwatch
 -- buttons route OnClick here). Snapshot is taken at click time, not creation time, so
 -- cancelling a 2nd pick reverts to the user's prior color, not the original default.
-local COLOR_PICKER_STATE = { active = nil }
+local COLOR_PICKER_STATE = { active = nil, swatches = {} }
+
+function COLOR_PICKER_STATE.RefreshSwatches(statName, r, g, b)
+    for _, swatch in ipairs(COLOR_PICKER_STATE.swatches[statName]) do
+        addon.settingsDesign.SetSwatchColor(swatch, r, g, b)
+    end
+end
 
 function COLOR_PICKER_STATE.IsActive(session)
     return COLOR_PICKER_STATE.active == session
@@ -14286,20 +14292,20 @@ local function OpenColorPicker(btn, statName)
         local writableDB = addon.dbRuntime.GetWritableSettings(true)
         if not writableDB or session.generation ~= addon.dbRuntime.generation then
             local persisted = GetColor(statName)
-            addon.settingsDesign.SetSwatchColor(btn, persisted.r, persisted.g, persisted.b)
+            COLOR_PICKER_STATE.RefreshSwatches(statName, persisted.r, persisted.g, persisted.b)
             return
         end
         if type(writableDB.colors) ~= "table" then writableDB.colors = {} end
         local r, g, b = ColorPickerFrame:GetColorRGB()
         session.changed = r ~= snapshot.r or g ~= snapshot.g or b ~= snapshot.b
-        addon.settingsDesign.SetSwatchColor(btn, r, g, b)
+        COLOR_PICKER_STATE.RefreshSwatches(statName, r, g, b)
         writableDB.colors[statName] = { r = r, g = g, b = b }
         CacheSettings()
         addon:RunUpdateStatsSafe()
     end
     local function RestoreSnapshotToSettings(settings)
         if type(settings.colors) ~= "table" then settings.colors = {} end
-        addon.settingsDesign.SetSwatchColor(btn, snapshot.r, snapshot.g, snapshot.b)
+        COLOR_PICKER_STATE.RefreshSwatches(statName, snapshot.r, snapshot.g, snapshot.b)
         settings.colors[statName] = hadExplicitColor
             and { r = snapshot.r, g = snapshot.g, b = snapshot.b } or nil
     end
@@ -14325,7 +14331,7 @@ local function OpenColorPicker(btn, statName)
             RestoreSnapshotToSettings(session.settings)
         else
             local persisted = GetColor(statName)
-            addon.settingsDesign.SetSwatchColor(btn, persisted.r, persisted.g, persisted.b)
+            COLOR_PICKER_STATE.RefreshSwatches(statName, persisted.r, persisted.g, persisted.b)
         end
         FinishCancel()
     end
@@ -14370,6 +14376,9 @@ local function CreateColorSwatch(parent, statName, x, y)
     well:SetPoint("CENTER")
     well:SetSize(geometry.swatchWellWidth, geometry.swatchWellHeight)
     btn.statsProColorWell = well
+    local swatches = COLOR_PICKER_STATE.swatches
+    if not swatches[statName] then swatches[statName] = {} end
+    tinsert(swatches[statName], btn)
     local initialColor = GetColor(statName)
     addon.settingsDesign.SetSwatchColor(btn, initialColor.r, initialColor.g, initialColor.b)
     addon.settingsDesign.StyleSwatch(btn)
@@ -19863,9 +19872,12 @@ function addon.settingsUI.BuildLayoutTab(self, context)
     -- sizes the panel (visual layout), not the text rendering.
     CreateConfigSlider(layoutTab, "StatsProScaleSlider", "Scale:", "scale", cd,
         0.5, 2.0, 0.1, "0.5", "2.0", "%.1f",
-        function()
-            -- Scale is a visual preview control: keep immediate feedback while dragging.
-            SetAllPanelsScale(GetNumberDB("scale"))
+        function(value, previous)
+            if pcall(SetAllPanelsScale, value) then return true end
+            -- Either panel may have changed before the native setter failed.
+            pcall(mainPanel.frame.SetScale, mainPanel.frame, previous)
+            pcall(defensivePanel.frame.SetScale, defensivePanel.frame, previous)
+            return false
         end)
 
     -- Refresh rate slider — controls how often stat values recompute (seconds).
